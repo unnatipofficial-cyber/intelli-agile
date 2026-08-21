@@ -1,13 +1,12 @@
-import { useState } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../convex/_generated/api";
 import { useAuth } from "@/hooks/use-auth";
 import { useTheme } from "@/hooks/use-theme";
+import type { AppTheme } from "@/hooks/use-theme";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
 import {
   Settings as SettingsIcon,
   Bell,
@@ -22,6 +21,8 @@ import {
   Shield,
   FolderKanban,
   Users,
+  Palette,
+  Zap,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useNavigate } from "react-router";
@@ -35,16 +36,94 @@ const notifTypeIcons: Record<string, any> = {
 };
 
 const notifTypeColors: Record<string, string> = {
-  task: "bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400",
-  sprint: "bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400",
+  task: "bg-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-300",
+  sprint: "bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-300",
   risk: "bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400",
-  project: "bg-purple-100 text-purple-600 dark:bg-purple-900/30 dark:text-purple-400",
-  team: "bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400",
+  project: "bg-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-300",
+  team: "bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-300",
 };
+
+/* ── Theme card preview ─────────────────────────────────────── */
+function ThemeCard({
+  id,
+  label,
+  description,
+  active,
+  onClick,
+  lightBg,
+  lightCard,
+  lightAccent,
+  lightText,
+  darkBg,
+  darkCard,
+  darkAccent,
+  darkText,
+}: {
+  id: AppTheme;
+  label: string;
+  description: string;
+  active: boolean;
+  onClick: () => void;
+  lightBg: string;
+  lightCard: string;
+  lightAccent: string;
+  lightText: string;
+  darkBg: string;
+  darkCard: string;
+  darkAccent: string;
+  darkText: string;
+}) {
+  const { theme } = useTheme();
+  const isDark = theme === "dark";
+
+  return (
+    <button
+      onClick={onClick}
+      className={cn(
+        "relative flex flex-col rounded-xl border-2 p-4 text-left transition-all",
+        active
+          ? "border-primary shadow-md ring-1 ring-primary/20"
+          : "border-border hover:border-muted-foreground/30 hover:shadow-sm"
+      )}
+    >
+      {active && (
+        <div className="absolute top-3 right-3">
+          <div className="w-5 h-5 rounded-full bg-primary flex items-center justify-center">
+            <CheckCircle2 className="w-3 h-3 text-primary-foreground" />
+          </div>
+        </div>
+      )}
+
+      {/* Mini preview */}
+      <div
+        className="w-full h-20 rounded-lg mb-3 flex items-end gap-1.5 p-2"
+        style={{ background: isDark ? darkBg : lightBg }}
+      >
+        <div
+          className="w-8 h-12 rounded-md"
+          style={{ background: isDark ? darkCard : lightCard }}
+        />
+        <div className="flex-1 flex flex-col gap-1">
+          <div
+            className="h-2 rounded-full w-3/4"
+            style={{ background: isDark ? darkAccent : lightAccent }}
+          />
+          <div
+            className="h-1.5 rounded-full w-1/2"
+            style={{ background: isDark ? darkText : lightText, opacity: 0.4 }}
+          />
+        </div>
+      </div>
+
+      <p className="text-sm font-semibold">{label}</p>
+      <p className="text-xs text-muted-foreground mt-0.5">{description}</p>
+    </button>
+  );
+}
 
 export default function SettingsPage() {
   const { user, signOut } = useAuth();
-  const { theme, toggleTheme } = useTheme();
+  const { theme, toggleTheme, appTheme, setAppTheme } = useTheme();
   const navigate = useNavigate();
   const notifications = useQuery(api.notifications.list);
   const markRead = useMutation(api.notifications.markRead);
@@ -78,16 +157,55 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      {/* Appearance */}
+      {/* ── Theme selector ───────────────────────────────────── */}
       <div className="glass-card p-5">
-        <div className="flex items-center gap-2 mb-4">
-          {theme === "light" ? <Sun className="w-4 h-4 text-primary" /> : <Moon className="w-4 h-4 text-primary" />}
-          <h3 className="text-sm font-bold">Appearance</h3>
+        <div className="flex items-center gap-2 mb-1">
+          <Palette className="w-4 h-4 text-primary" />
+          <h3 className="text-sm font-bold">Theme</h3>
         </div>
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm">Dark Mode</p>
-            <p className="text-xs text-muted-foreground">Toggle between light and dark themes</p>
+        <p className="text-xs text-muted-foreground mb-4">Choose a visual theme for the application</p>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
+          <ThemeCard
+            id="graphite"
+            label="Graphite"
+            description="Monochromatic cool-gray. Sharp and restrained."
+            active={appTheme === "graphite"}
+            onClick={() => setAppTheme("graphite")}
+            lightBg="#f0f0f0"
+            lightCard="#f5f5f5"
+            lightAccent="#606060"
+            lightText="#333333"
+            darkBg="#1a1a1a"
+            darkCard="#202020"
+            darkAccent="#a0a0a0"
+            darkText="#d9d9d9"
+          />
+          <ThemeCard
+            id="modern-minimal"
+            label="Modern Minimal"
+            description="Stark black & white with a blue accent. Ultra-clean."
+            active={appTheme === "modern-minimal"}
+            onClick={() => setAppTheme("modern-minimal")}
+            lightBg="#ffffff"
+            lightCard="#f9fafb"
+            lightAccent="#3b82f6"
+            lightText="#333333"
+            darkBg="#171717"
+            darkCard="#262626"
+            darkAccent="#3b82f6"
+            darkText="#e5e5e5"
+          />
+        </div>
+
+        {/* Dark mode toggle */}
+        <div className="flex items-center justify-between pt-4 border-t border-border/50">
+          <div className="flex items-center gap-2">
+            {theme === "light" ? <Sun className="w-4 h-4 text-muted-foreground" /> : <Moon className="w-4 h-4 text-muted-foreground" />}
+            <div>
+              <p className="text-sm font-medium">Dark Mode</p>
+              <p className="text-xs text-muted-foreground">Toggle between light and dark</p>
+            </div>
           </div>
           <button
             onClick={toggleTheme}
