@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useState, useCallback } from "rea
 import type { ReactNode } from "react";
 
 export type ThemeMode = "light" | "dark";
-export type AppTheme = "graphite" | "modern-minimal";
+export type AppTheme = "graphite" | "modern-minimal" | "darkmatter";
 
 interface ThemeContextValue {
   /** Light or dark mode */
@@ -35,7 +35,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const [appTheme, setAppThemeState] = useState<AppTheme>(() => {
     if (typeof window !== "undefined") {
       const stored = localStorage.getItem("aie-app-theme");
-      if (stored === "graphite" || stored === "modern-minimal") return stored;
+      if (stored === "graphite" || stored === "modern-minimal" || stored === "darkmatter") return stored;
     }
     return "graphite";
   });

@@ -165,7 +165,7 @@ export default function SettingsPage() {
         </div>
         <p className="text-xs text-muted-foreground mb-4">Choose a visual theme for the application</p>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-5">
           <ThemeCard
             id="graphite"
             label="Graphite"
@@ -195,6 +195,21 @@ export default function SettingsPage() {
             darkCard="#262626"
             darkAccent="#3b82f6"
             darkText="#e5e5e5"
+          />
+          <ThemeCard
+            id="darkmatter"
+            label="Darkmatter"
+            description="Ultra-dark near-black with a warm amber accent. Intensely atmospheric."
+            active={appTheme === "darkmatter"}
+            onClick={() => setAppTheme("darkmatter")}
+            lightBg="#ffffff"
+            lightCard="#f3f4f6"
+            lightAccent="#d87943"
+            lightText="#111827"
+            darkBg="#121113"
+            darkCard="#222222"
+            darkAccent="#e78a53"
+            darkText="#c1c1c1"
           />
         </div>
 
