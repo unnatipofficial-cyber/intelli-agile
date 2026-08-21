@@ -1,6 +1,7 @@
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router";
 import { Button } from "@/components/ui/button";
+import { AIELogo } from "@/components/AIELogo";
 import {
   Zap,
   BarChart3,
@@ -65,9 +66,7 @@ export default function Landing() {
       <nav className="glass-topbar sticky top-0 z-50">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg aie-gradient flex items-center justify-center">
-              <Zap className="w-4 h-4 text-white" />
-            </div>
+            <AIELogo size="sm" />
             <div>
               <span className="text-base font-bold tracking-tight">AIE</span>
               <span className="text-[9px] font-medium text-muted-foreground ml-1.5 hidden sm:inline">Agile Intelligence Engine</span>

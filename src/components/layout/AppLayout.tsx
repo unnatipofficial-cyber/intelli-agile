@@ -4,13 +4,13 @@ import { useAuth } from "@/hooks/use-auth";
 import { useTheme } from "@/hooks/use-theme";
 import { cn } from "@/lib/utils";
 import { FloatingDock, dockNavItems } from "@/components/FloatingDock";
+import { AIELogo } from "@/components/AIELogo";
 import {
   Moon,
   Sun,
   Bell,
   Search,
   LogOut,
-  Zap,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -38,9 +38,7 @@ function TopBar() {
         onClick={() => navigate("/dashboard")}
         className="flex items-center gap-2.5 shrink-0 group"
       >
-        <div className="flex items-center justify-center w-8 h-8 rounded-lg aie-gradient text-white shadow-sm transition-transform group-hover:scale-105">
-          <Zap className="w-4 h-4" />
-        </div>
+        <AIELogo size="sm" className="transition-transform group-hover:scale-105" />
         <span className="text-base font-bold tracking-tight text-foreground hidden sm:block">
           AIE
         </span>
