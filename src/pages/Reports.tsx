@@ -16,6 +16,7 @@ import {
   Clock,
   Sparkles,
 } from "lucide-react";
+import { projectStatusStyles, sprintStatusStyles, severityStyles, insightSeverityStyles } from "@/lib/badge-colors";
 
 export default function Reports() {
   const projects = useQuery(api.projects.list);
@@ -122,7 +123,7 @@ export default function Reports() {
             </div>
             <div className="text-right text-xs text-muted-foreground">
               <p>Generated: {new Date().toLocaleDateString()}</p>
-              <Badge className={cn("text-[10px] mt-1 capitalize", activeProject.status === "active" ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-600")}>
+              <Badge className="text-[10px] mt-1 capitalize" style={projectStatusStyles[activeProject.status]}>
                 {activeProject.status}
               </Badge>
             </div>
@@ -140,11 +141,11 @@ export default function Reports() {
                   <p className="text-xs text-muted-foreground">Total Tasks</p>
                 </div>
                 <div className="p-3 rounded-xl bg-muted/50">
-                  <p className="text-2xl font-bold text-emerald-600">{stats.completed}</p>
+                  <p className="text-2xl font-bold" style={{ color: "var(--chart-4)" }}>{stats.completed}</p>
                   <p className="text-xs text-muted-foreground">Completed</p>
                 </div>
                 <div className="p-3 rounded-xl bg-muted/50">
-                  <p className="text-2xl font-bold text-blue-600">{stats.totalPoints}</p>
+                  <p className="text-2xl font-bold" style={{ color: "var(--chart-1)" }}>{stats.totalPoints}</p>
                   <p className="text-xs text-muted-foreground">Total Story Points</p>
                 </div>
                 <div className="p-3 rounded-xl bg-muted/50">
@@ -167,10 +168,7 @@ export default function Reports() {
                     <div className="flex-1">
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-medium">{sprint.name}</span>
-                        <Badge variant="outline" className={cn("text-[10px] capitalize",
-                          sprint.status === "active" ? "bg-emerald-100 text-emerald-700" :
-                          sprint.status === "completed" ? "bg-blue-100 text-blue-700" : "bg-slate-100 text-slate-600"
-                        )}>{sprint.status}</Badge>
+                        <Badge variant="outline" className="text-[10px] capitalize" style={sprintStatusStyles[sprint.status]}>{sprint.status}</Badge>
                       </div>
                       <p className="text-xs text-muted-foreground mt-0.5">{sprint.goal || "No goal"}</p>
                     </div>
@@ -219,19 +217,15 @@ export default function Reports() {
               <ShieldAlert className="w-4 h-4 text-primary" /> Risks ({openRisks.length} open)
             </h3>
             {criticalRisks.length > 0 && (
-              <div className="mb-3 p-3 rounded-xl bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800/30">
-                <p className="text-xs font-semibold text-red-700 dark:text-red-400">
+              <div className="mb-3 p-3 rounded-xl" style={{ backgroundColor: insightSeverityStyles.critical.bg, borderColor: insightSeverityStyles.critical.border, borderWidth: 1, borderStyle: "solid" }}>
+                <p className="text-xs font-semibold" style={{ color: insightSeverityStyles.critical.text }}>
                   {criticalRisks.length} high/critical risk{criticalRisks.length > 1 ? "s" : ""} require attention
                 </p>
               </div>
             )}
             {openRisks.slice(0, 5).map((risk) => (
               <div key={risk._id} className="flex items-center gap-3 p-2 text-xs">
-                <Badge className={cn("text-[10px] capitalize w-14 justify-center",
-                  risk.severity === "critical" ? "bg-red-100 text-red-700" :
-                  risk.severity === "high" ? "bg-orange-100 text-orange-700" :
-                  risk.severity === "medium" ? "bg-amber-100 text-amber-700" : "bg-emerald-100 text-emerald-700"
-                )}>{risk.severity}</Badge>
+                <Badge className="text-[10px] capitalize w-14 justify-center" style={severityStyles[risk.severity]}>{risk.severity}</Badge>
                 <span className="flex-1">{risk.title}</span>
                 <span className="text-muted-foreground">Score: {risk.score}</span>
               </div>
@@ -248,11 +242,7 @@ export default function Reports() {
                 {insights.slice(0, 5).map((insight) => (
                   <div key={insight.id} className="p-3 rounded-xl bg-primary/5 border border-primary/10">
                     <div className="flex items-center gap-2 mb-1">
-                      <Badge variant="outline" className={cn("text-[10px] capitalize",
-                        insight.severity === "critical" ? "text-red-600 border-red-200" :
-                        insight.severity === "high" ? "text-orange-600 border-orange-200" :
-                        "text-primary border-primary/20"
-                      )}>{insight.severity}</Badge>
+                      <Badge variant="outline" className="text-[10px] capitalize" style={severityStyles[insight.severity]}>{insight.severity}</Badge>
                       <span className="text-xs font-semibold">{insight.title}</span>
                     </div>
                     <p className="text-xs text-muted-foreground">{insight.description}</p>

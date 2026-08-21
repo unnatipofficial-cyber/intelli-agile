@@ -31,13 +31,16 @@ import {
   CheckCircle2,
 } from "lucide-react";
 import { toast } from "sonner";
+import { insightSeverityStyles, severityStyles } from "@/lib/badge-colors";
 
 const severityColors: Record<string, { bg: string; text: string; badge: string }> = {
-  low: { bg: "bg-emerald-50 dark:bg-emerald-950/20", text: "text-emerald-600", badge: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400" },
-  medium: { bg: "bg-amber-50 dark:bg-amber-950/20", text: "text-amber-600", badge: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400" },
-  high: { bg: "bg-orange-50 dark:bg-orange-950/20", text: "text-orange-600", badge: "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400" },
-  critical: { bg: "bg-red-50 dark:bg-red-950/20", text: "text-red-600", badge: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400" },
+  low: { bg: "", text: "", badge: "" },
+  medium: { bg: "", text: "", badge: "" },
+  high: { bg: "", text: "", badge: "" },
+  critical: { bg: "", text: "", badge: "" },
 };
+
+const sevStyle = (severity: string) => insightSeverityStyles[severity] || insightSeverityStyles.medium;
 
 const statusIcons: Record<string, any> = {
   open: AlertTriangle,
@@ -144,7 +147,7 @@ function RiskFormDialog({
           <div className="flex items-center gap-3 p-3 rounded-xl bg-muted/50">
             <span className="text-sm text-muted-foreground">Score:</span>
             <span className="text-lg font-bold">{form.probability * form.impact}</span>
-            <Badge className={cn("text-[10px] capitalize", severityColors[severity]?.badge)}>{severity}</Badge>
+            <Badge className="text-[10px] capitalize" style={severityStyles[severity]}>{severity}</Badge>
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
@@ -262,19 +265,17 @@ export default function Risks() {
                   const cellRisks = matrixRisks.filter(
                     (r) => r.probability === prob && r.impact === impact
                   );
-                  let bgClass = "bg-emerald-50 dark:bg-emerald-950/20";
-                  if (score >= 16) bgClass = "bg-red-100 dark:bg-red-950/30";
-                  else if (score >= 10) bgClass = "bg-orange-100 dark:bg-orange-950/20";
-                  else if (score >= 5) bgClass = "bg-amber-50 dark:bg-amber-950/20";
+                  let cellSeverity = "low";
+                  if (score >= 16) cellSeverity = "critical";
+                  else if (score >= 10) cellSeverity = "high";
+                  else if (score >= 5) cellSeverity = "medium";
+                  const cellStyle = sevStyle(cellSeverity);
 
                   return (
                     <div
                       key={`${row}-${col}`}
-                      className={cn(
-                        "aspect-square rounded-lg flex flex-col items-center justify-center text-[10px] relative",
-                        bgClass,
-                        cellRisks.length > 0 && "ring-2 ring-primary/30"
-                      )}
+                      className="aspect-square rounded-lg flex flex-col items-center justify-center text-[10px] relative"
+                      style={{ backgroundColor: cellStyle.bg, ...(cellRisks.length > 0 ? { boxShadow: `0 0 0 2px var(--primary)30` } : {}) }}
                     >
                       <span className="font-semibold">{score}</span>
                       {cellRisks.length > 0 && (
@@ -290,10 +291,10 @@ export default function Risks() {
           </div>
           {/* Legend */}
           <div className="flex items-center justify-center gap-3 mt-4 text-[10px] text-muted-foreground">
-            <div className="flex items-center gap-1"><div className="w-3 h-3 rounded bg-emerald-100 dark:bg-emerald-950/20" /> Low</div>
-            <div className="flex items-center gap-1"><div className="w-3 h-3 rounded bg-amber-50 dark:bg-amber-950/20" /> Medium</div>
-            <div className="flex items-center gap-1"><div className="w-3 h-3 rounded bg-orange-100 dark:bg-orange-950/20" /> High</div>
-            <div className="flex items-center gap-1"><div className="w-3 h-3 rounded bg-red-100 dark:bg-red-950/30" /> Critical</div>
+            <div className="flex items-center gap-1"><div className="w-3 h-3 rounded" style={{ backgroundColor: sevStyle("low").bg }} /> Low</div>
+            <div className="flex items-center gap-1"><div className="w-3 h-3 rounded" style={{ backgroundColor: sevStyle("medium").bg }} /> Medium</div>
+            <div className="flex items-center gap-1"><div className="w-3 h-3 rounded" style={{ backgroundColor: sevStyle("high").bg }} /> High</div>
+            <div className="flex items-center gap-1"><div className="w-3 h-3 rounded" style={{ backgroundColor: sevStyle("critical").bg }} /> Critical</div>
           </div>
         </motion.div>
 
@@ -302,7 +303,7 @@ export default function Risks() {
           <AnimatePresence>
             {sortedRisks.map((risk, i) => {
               const StatusIcon = statusIcons[risk.status] || AlertTriangle;
-              const colors = severityColors[risk.severity] || severityColors.medium;
+              const sev = sevStyle(risk.severity);
               return (
                 <motion.div
                   key={risk._id}
@@ -311,15 +312,15 @@ export default function Risks() {
                   exit={{ opacity: 0, x: -12 }}
                   transition={{ delay: i * 0.03 }}
                   className="glass-card p-4 border-l-[3px]"
-                  style={{ borderLeftColor: risk.severity === "critical" ? "#ef4444" : risk.severity === "high" ? "#f97316" : risk.severity === "medium" ? "#eab308" : "#22c55e" }}
+                  style={{ borderLeftColor: sev.text }}
                 >
                   <div className="flex items-start justify-between mb-2">
                     <div className="flex items-center gap-2">
-                      <StatusIcon className={cn("w-4 h-4", colors.text)} />
+                      <StatusIcon className="w-4 h-4" style={{ color: sev.text }} />
                       <h4 className="text-sm font-semibold">{risk.title}</h4>
                     </div>
                     <div className="flex items-center gap-1">
-                      <Badge className={cn("text-[10px] capitalize", colors.badge)}>{risk.severity}</Badge>
+                      <Badge className="text-[10px] capitalize" style={severityStyles[risk.severity]}>{risk.severity}</Badge>
                       <button onClick={() => { setEditingRisk(risk); setShowForm(true); }} className="p-1 rounded hover:bg-accent/50 text-muted-foreground">
                         <Pencil className="w-3 h-3" />
                       </button>

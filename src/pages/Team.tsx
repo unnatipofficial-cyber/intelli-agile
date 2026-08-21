@@ -4,6 +4,7 @@ import { useQuery } from "convex/react";
 import { api } from "../convex/_generated/api";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
+import { insightSeverityStyles } from "@/lib/badge-colors";
 import { Badge } from "@/components/ui/badge";
 import {
   Users,
@@ -117,13 +118,14 @@ export default function Team() {
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.05 }}
-              className={cn("glass-card p-5", isOverloaded && "ring-2 ring-orange-400/50")}
+              className="glass-card p-5"
+              style={isOverloaded ? { boxShadow: `0 0 0 2px ${insightSeverityStyles.high.text}40` } : undefined}
             >
               <div className="flex items-center gap-3 mb-4">
-                <div className={cn(
-                  "w-11 h-11 rounded-full flex items-center justify-center text-sm font-bold",
-                  isOverloaded ? "bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400" : "bg-primary/10 text-primary"
-                )}>
+                <div
+                  className="w-11 h-11 rounded-full flex items-center justify-center text-sm font-bold"
+                  style={isOverloaded ? { backgroundColor: insightSeverityStyles.high.bg, color: insightSeverityStyles.high.text } : { backgroundColor: "color-mix(in srgb, var(--primary) 10%, transparent)", color: "var(--primary)" }}
+                >
                   {user?.name?.charAt(0) || "?"}
                 </div>
                 <div className="flex-1 min-w-0">
@@ -131,7 +133,7 @@ export default function Team() {
                   <p className="text-xs text-muted-foreground">{user?.jobTitle || member.role || "Team Member"}</p>
                 </div>
                 {isOverloaded && (
-                  <Badge className="text-[10px] bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400">
+                  <Badge className="text-[10px]" style={{ backgroundColor: insightSeverityStyles.high.bg, color: insightSeverityStyles.high.text }}>
                     Overloaded
                   </Badge>
                 )}
@@ -142,7 +144,7 @@ export default function Team() {
                   <p className="text-[10px] text-muted-foreground">Active SP</p>
                 </div>
                 <div className="text-center">
-                  <p className="text-lg font-bold text-emerald-600 dark:text-emerald-400">{member.completedPoints}</p>
+                  <p className="text-lg font-bold" style={{ color: insightSeverityStyles.low.text }}>{member.completedPoints}</p>
                   <p className="text-[10px] text-muted-foreground">Done SP</p>
                 </div>
                 <div className="text-center">
@@ -158,8 +160,8 @@ export default function Team() {
                 </div>
                 <div className="h-1.5 rounded-full bg-muted overflow-hidden">
                   <div
-                    className={cn("h-full rounded-full transition-all", isOverloaded ? "bg-orange-400" : "bg-primary")}
-                    style={{ width: `${Math.min(100, (member.activePoints / Math.max(1, avg * 2)) * 100)}%` }}
+                    className="h-full rounded-full transition-all"
+                    style={{ backgroundColor: isOverloaded ? insightSeverityStyles.high.text : "var(--primary)", width: `${Math.min(100, (member.activePoints / Math.max(1, avg * 2)) * 100)}%` }}
                   />
                 </div>
               </div>

@@ -6,6 +6,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useAiInsights } from "@/hooks/use-ai-insights";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
+import { insightSeverityStyles } from "@/lib/badge-colors";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -127,12 +128,14 @@ function AieInsights({ projectId, allTasks, sprints, risks, workload }: { projec
     );
   }
 
-  const severityColors: Record<string, { bg: string; text: string; border: string; icon: any }> = {
-    critical: { bg: "bg-red-50 dark:bg-red-950/20", text: "text-red-700 dark:text-red-400", border: "border-red-200 dark:border-red-800/30", icon: AlertTriangle },
-    high: { bg: "bg-orange-50 dark:bg-orange-950/20", text: "text-orange-700 dark:text-orange-400", border: "border-orange-200 dark:border-orange-800/30", icon: TrendingUp },
-    medium: { bg: "bg-amber-50 dark:bg-amber-950/20", text: "text-amber-700 dark:text-amber-400", border: "border-amber-200 dark:border-amber-800/30", icon: Timer },
-    low: { bg: "bg-emerald-50 dark:bg-emerald-950/20", text: "text-emerald-700 dark:text-emerald-400", border: "border-emerald-200 dark:border-emerald-800/30", icon: CheckCircle2 },
+  const severityIcons: Record<string, any> = {
+    critical: AlertTriangle,
+    high: TrendingUp,
+    medium: Timer,
+    low: CheckCircle2,
   };
+
+  const getSeverityStyle = (severity: string) => insightSeverityStyles[severity] || insightSeverityStyles.medium;
 
   return (
     <div className="glass-card p-6 aie-glow relative overflow-hidden">
@@ -168,26 +171,23 @@ function AieInsights({ projectId, allTasks, sprints, risks, workload }: { projec
 
         <div className="space-y-3">
           {insights.slice(0, 5).map((insight) => {
-            const colors = severityColors[insight.severity] || severityColors.medium;
-            const IconComp = colors.icon;
+            const sev = getSeverityStyle(insight.severity);
+            const IconComp = severityIcons[insight.severity] || Timer;
             return (
               <motion.div
                 key={insight.id}
                 initial={{ opacity: 0, x: -8 }}
                 animate={{ opacity: 1, x: 0 }}
-                className={cn(
-                  "rounded-xl border p-4 transition-colors",
-                  colors.bg,
-                  colors.border
-                )}
+                className="rounded-xl border p-4 transition-colors"
+                style={{ backgroundColor: sev.bg, borderColor: sev.border }}
               >
                 <div className="flex items-start gap-3">
-                  <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center shrink-0", colors.bg)}>
-                    <IconComp className={cn("w-4 h-4", colors.text)} />
+                  <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: sev.bg }}>
+                    <IconComp className="w-4 h-4" style={{ color: sev.text }} />
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
-                      <Badge variant="outline" className={cn("text-[10px] px-1.5 py-0 h-4 capitalize border-current", colors.text)}>
+                      <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 capitalize" style={{ color: sev.text, borderColor: sev.border }}>
                         {insight.severity}
                       </Badge>
                       <span className="text-sm font-semibold">{insight.title}</span>
@@ -216,27 +216,24 @@ function AieInsights({ projectId, allTasks, sprints, risks, workload }: { projec
             </div>
             <div className="space-y-3">
               {aiInsights.map((insight: any, i: number) => {
-                const colors = severityColors[insight.severity] || severityColors.medium;
-                const IconComp = colors.icon;
+                const sev = getSeverityStyle(insight.severity);
+                const IconComp = severityIcons[insight.severity] || Timer;
                 return (
                   <motion.div
                     key={`ai-${i}`}
                     initial={{ opacity: 0, x: -8 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: i * 0.05 }}
-                    className={cn(
-                      "rounded-xl border p-4 transition-colors",
-                      colors.bg,
-                      colors.border
-                    )}
+                    className="rounded-xl border p-4 transition-colors"
+                    style={{ backgroundColor: sev.bg, borderColor: sev.border }}
                   >
                     <div className="flex items-start gap-3">
-                      <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center shrink-0", colors.bg)}>
-                        <IconComp className={cn("w-4 h-4", colors.text)} />
+                      <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: sev.bg }}>
+                        <IconComp className="w-4 h-4" style={{ color: sev.text }} />
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1">
-                          <Badge variant="outline" className={cn("text-[10px] px-1.5 py-0 h-4 capitalize border-current", colors.text)}>
+                          <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 capitalize" style={{ color: sev.text, borderColor: sev.border }}>
                             {insight.severity}
                           </Badge>
                           <span className="text-sm font-semibold">{insight.title}</span>
@@ -256,8 +253,8 @@ function AieInsights({ projectId, allTasks, sprints, risks, workload }: { projec
         )}
 
         {aiError && (
-          <div className="mt-4 p-3 rounded-xl bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800/30">
-            <p className="text-xs text-red-600 dark:text-red-400">AI analysis failed: {aiError}</p>
+          <div className="mt-4 p-3 rounded-xl" style={{ backgroundColor: insightSeverityStyles.critical.bg, borderColor: insightSeverityStyles.critical.border, borderWidth: 1, borderStyle: "solid" }}>
+            <p className="text-xs" style={{ color: insightSeverityStyles.critical.text }}>AI analysis failed: {aiError}</p>
           </div>
         )}
       </div>
@@ -439,7 +436,7 @@ export default function Dashboard() {
               <div className="flex items-center gap-2 mb-2">
                 <Activity className="w-4 h-4 text-primary" />
                 <span className="text-sm font-semibold">{activeSprint.name}</span>
-                <Badge variant="secondary" className="text-[10px] bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">
+                <Badge variant="secondary" className="text-[10px]" style={{ backgroundColor: insightSeverityStyles.low.bg, color: insightSeverityStyles.low.text }}>
                   Active
                 </Badge>
               </div>

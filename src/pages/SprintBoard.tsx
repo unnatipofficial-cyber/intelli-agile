@@ -17,27 +17,14 @@ import {
   Eye,
 } from "lucide-react";
 import { toast } from "sonner";
+import { priorityStyles, priorityBorderColors } from "@/lib/badge-colors";
 
 const columns = [
-  { id: "todo", label: "To Do", icon: Clock, color: cssVar("--muted-foreground"), bgColor: "bg-gray-100 dark:bg-gray-800/30" },
-  { id: "in-progress", label: "In Progress", icon: Loader2, color: cssVar("--chart-1"), bgColor: "bg-gray-100 dark:bg-gray-800/30" },
-  { id: "review", label: "Review", icon: Eye, color: cssVar("--chart-4"), bgColor: "bg-gray-100 dark:bg-gray-800/20" },
-  { id: "done", label: "Done", icon: CheckCircle2, color: cssVar("--chart-3"), bgColor: "bg-gray-100 dark:bg-gray-800/20" },
+  { id: "todo", label: "To Do", icon: Clock, color: cssVar("--muted-foreground"), bgColor: "bg-muted/40" },
+  { id: "in-progress", label: "In Progress", icon: Loader2, color: cssVar("--chart-1"), bgColor: "bg-muted/40" },
+  { id: "review", label: "Review", icon: Eye, color: cssVar("--chart-4"), bgColor: "bg-muted/30" },
+  { id: "done", label: "Done", icon: CheckCircle2, color: cssVar("--chart-3"), bgColor: "bg-muted/30" },
 ] as const;
-
-const priorityColors: Record<string, string> = {
-  low: "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400",
-  medium: "bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400",
-  high: "bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400",
-  critical: "bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400",
-};
-
-const priorityBorders: Record<string, string> = {
-  low: "border-l-slate-300",
-  medium: "border-l-blue-400",
-  high: "border-l-orange-400",
-  critical: "border-l-red-500",
-};
 
 function TaskCard({
   task,
@@ -60,10 +47,8 @@ function TaskCard({
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0, scale: isDragging ? 1.02 : 1 }}
       exit={{ opacity: 0, scale: 0.95 }}
-      className={cn(
-        "glass-card p-3 border-l-[3px] cursor-grab active:cursor-grabbing",
-        priorityBorders[task.priority] || "border-l-slate-300"
-      )}
+      className="glass-card p-3 border-l-[3px] cursor-grab active:cursor-grabbing"
+      style={{ borderLeftColor: priorityBorderColors[task.priority] || cssVar("--muted-foreground") }}
       draggable
       onDragStart={(e: any) => {
         e.dataTransfer.setData("taskId", task._id);
@@ -76,7 +61,7 @@ function TaskCard({
         <p className="text-sm font-medium leading-snug">{task.title}</p>
       </div>
       <div className="flex items-center gap-2 flex-wrap">
-        <Badge className={cn("text-[10px] capitalize", priorityColors[task.priority])}>
+        <Badge className="text-[10px] capitalize" style={priorityStyles[task.priority]}>
           {task.priority}
         </Badge>
         {task.storyPoints && (

@@ -26,6 +26,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useNavigate } from "react-router";
+import { notifTypeStyles } from "@/lib/badge-colors";
 
 const notifTypeIcons: Record<string, any> = {
   task: CheckCircle2,
@@ -33,14 +34,6 @@ const notifTypeIcons: Record<string, any> = {
   risk: AlertTriangle,
   project: FolderKanban,
   team: Users,
-};
-
-const notifTypeColors: Record<string, string> = {
-  task: "bg-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-300",
-  sprint: "bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-300",
-  risk: "bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400",
-  project: "bg-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-300",
-  team: "bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-300",
 };
 
 /* ── Theme card preview ─────────────────────────────────────── */
@@ -273,7 +266,7 @@ export default function SettingsPage() {
                   animate={{ opacity: 1, y: 0 }}
                   className="flex items-start gap-3 p-3 rounded-xl bg-primary/5 border border-primary/10"
                 >
-                  <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center shrink-0", notifTypeColors[notif.type])}>
+                  <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={notifTypeStyles[notif.type]}>
                     <Icon className="w-4 h-4" />
                   </div>
                   <div className="flex-1 min-w-0">

@@ -33,20 +33,7 @@ import {
   ChevronDown,
 } from "lucide-react";
 import { toast } from "sonner";
-
-const priorityColors: Record<string, string> = {
-  low: "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400",
-  medium: "bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400",
-  high: "bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400",
-  critical: "bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400",
-};
-
-const statusColors: Record<string, string> = {
-  todo: "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400",
-  "in-progress": "bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400",
-  review: "bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400",
-  done: "bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400",
-};
+import { priorityStyles, statusStyles } from "@/lib/badge-colors";
 
 const typeIcons: Record<string, any> = {
   task: ListTodo,
@@ -343,8 +330,8 @@ export default function Backlog() {
                   {task.storyPoints && (
                     <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5">{task.storyPoints} SP</Badge>
                   )}
-                  <Badge className={cn("text-[10px] capitalize", priorityColors[task.priority])}>{task.priority}</Badge>
-                  <Badge className={cn("text-[10px] capitalize", statusColors[task.status])}>{task.status.replace("-", " ")}</Badge>
+                  <Badge className="text-[10px] capitalize" style={priorityStyles[task.priority]}>{task.priority}</Badge>
+                  <Badge className="text-[10px] capitalize" style={statusStyles[task.status]}>{task.status.replace("-", " ")}</Badge>
                   {task.assignee && (
                     <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center text-[10px] font-semibold text-primary">
                       {(task.assignee as any)?.name?.charAt(0) || "?"}
