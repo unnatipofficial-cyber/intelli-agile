@@ -18,10 +18,10 @@ import {
 import { toast } from "sonner";
 
 const columns = [
-  { id: "todo", label: "To Do", icon: Clock, color: "#94a3b8", bgColor: "bg-slate-50 dark:bg-slate-900/30" },
-  { id: "in-progress", label: "In Progress", icon: Loader2, color: "#2563eb", bgColor: "bg-blue-50 dark:bg-blue-950/20" },
-  { id: "review", label: "Review", icon: Eye, color: "#f59e0b", bgColor: "bg-amber-50 dark:bg-amber-950/20" },
-  { id: "done", label: "Done", icon: CheckCircle2, color: "#10b981", bgColor: "bg-emerald-50 dark:bg-emerald-950/20" },
+  { id: "todo", label: "To Do", icon: Clock, color: "#b0b0b0", bgColor: "bg-gray-100 dark:bg-gray-800/30" },
+  { id: "in-progress", label: "In Progress", icon: Loader2, color: "#606060", bgColor: "bg-gray-100 dark:bg-gray-800/30" },
+  { id: "review", label: "Review", icon: Eye, color: "#808080", bgColor: "bg-gray-100 dark:bg-gray-800/20" },
+  { id: "done", label: "Done", icon: CheckCircle2, color: "#a0a0a0", bgColor: "bg-gray-100 dark:bg-gray-800/20" },
 ] as const;
 
 const priorityColors: Record<string, string> = {

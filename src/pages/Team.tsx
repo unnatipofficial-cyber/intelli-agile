@@ -95,8 +95,8 @@ export default function Team() {
                     fontSize: "12px",
                   }}
                 />
-                <Bar dataKey="active" fill="#3b82f6" radius={[4, 4, 0, 0]} name="Active SP" />
-                <Bar dataKey="completed" fill="#10b981" radius={[4, 4, 0, 0]} name="Completed SP" />
+                <Bar dataKey="active" fill="#606060" radius={[4, 4, 0, 0]} name="Active SP" />
+                <Bar dataKey="completed" fill="#a0a0a0" radius={[4, 4, 0, 0]} name="Completed SP" />
               </BarChart>
             </ResponsiveContainer>
           </div>

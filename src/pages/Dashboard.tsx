@@ -42,11 +42,11 @@ import {
 } from "recharts";
 
 const COLORS = {
-  primary: "#2563eb",
-  secondary: "#06b6d4",
-  tertiary: "#8b5cf6",
-  quaternary: "#f59e0b",
-  quinary: "#10b981",
+  primary: "#606060",
+  secondary: "#476666",
+  tertiary: "#909090",
+  quaternary: "#a8a8a8",
+  quinary: "#c0c0c0",
 };
 
 function KpiCard({
@@ -331,10 +331,10 @@ export default function Dashboard() {
   const taskDistribution = useMemo(() => {
     if (!stats) return [];
     return [
-      { name: "Done", value: stats.completed, color: "#10b981" },
-      { name: "In Progress", value: stats.inProgress, color: "#2563eb" },
-      { name: "Review", value: stats.review, color: "#f59e0b" },
-      { name: "To Do", value: stats.todo, color: "#94a3b8" },
+      { name: "Done", value: stats.completed, color: "#a0a0a0" },
+      { name: "In Progress", value: stats.inProgress, color: "#606060" },
+      { name: "Review", value: stats.review, color: "#808080" },
+      { name: "To Do", value: stats.todo, color: "#b0b0b0" },
     ];
   }, [stats]);
 

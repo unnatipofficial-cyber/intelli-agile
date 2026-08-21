@@ -28,7 +28,7 @@ import {
   Legend,
 } from "recharts";
 
-const COLORS = ["#2563eb", "#06b6d4", "#8b5cf6", "#f59e0b", "#10b981", "#ef4444"];
+const COLORS = ["#606060", "#476666", "#909090", "#a8a8a8", "#c0c0c0", "#cc3333"];
 
 export default function Analytics() {
   const projects = useQuery(api.projects.list);
@@ -157,7 +157,7 @@ export default function Analytics() {
                   <XAxis dataKey="sprintName" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
                   <YAxis tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
                   <Tooltip contentStyle={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: "8px", fontSize: "12px" }} />
-                  <Bar dataKey="velocity" fill="#2563eb" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="velocity" fill="#606060" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             ) : (
@@ -182,8 +182,8 @@ export default function Analytics() {
                   <ResponsiveContainer width="100%" height={200}>
                     <PieChart>
                       <Pie data={taskCompletion} cx="50%" cy="50%" innerRadius={50} outerRadius={75} paddingAngle={3} dataKey="value">
-                        <Cell fill="#10b981" />
-                        <Cell fill="#e2e8f0" />
+                        <Cell fill="#a0a0a0" />
+                        <Cell fill="#d0d0d0" />
                       </Pie>
                       <Tooltip contentStyle={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: "8px", fontSize: "12px" }} />
                     </PieChart>
@@ -192,7 +192,7 @@ export default function Analytics() {
                 <div className="w-1/2 space-y-3">
                   {taskCompletion.map((item, i) => (
                     <div key={item.name} className="flex items-center gap-3">
-                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: i === 0 ? "#10b981" : "#e2e8f0" }} />
+                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: i === 0 ? "#a0a0a0" : "#d0d0d0" }} />
                       <div>
                         <p className="text-sm font-semibold">{item.value}</p>
                         <p className="text-xs text-muted-foreground">{item.name}</p>
@@ -230,8 +230,8 @@ export default function Analytics() {
                   <YAxis tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
                   <Tooltip contentStyle={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: "8px", fontSize: "12px" }} />
                   <Legend />
-                  <Bar dataKey="completed" stackId="a" fill="#10b981" name="Completed" radius={[0, 0, 0, 0]} />
-                  <Bar dataKey="remaining" stackId="a" fill="#e2e8f0" name="Remaining" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="completed" stackId="a" fill="#a0a0a0" name="Completed" radius={[0, 0, 0, 0]} />
+                  <Bar dataKey="remaining" stackId="a" fill="#d0d0d0" name="Remaining" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             ) : (
@@ -292,8 +292,8 @@ export default function Analytics() {
                   <YAxis tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
                   <Tooltip contentStyle={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: "8px", fontSize: "12px" }} />
                   <Legend />
-                  <Bar dataKey="active" fill="#3b82f6" name="Active" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="completed" fill="#10b981" name="Completed" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="active" fill="#a0a0a0" name="Active" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="completed" fill="#a0a0a0" name="Completed" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             ) : (
@@ -315,9 +315,9 @@ export default function Analytics() {
                   <ResponsiveContainer width="100%" height={200}>
                     <PieChart>
                       <Pie data={riskTrend} cx="50%" cy="50%" innerRadius={50} outerRadius={75} paddingAngle={3} dataKey="value">
-                        <Cell fill="#ef4444" />
-                        <Cell fill="#f59e0b" />
-                        <Cell fill="#10b981" />
+                        <Cell fill="#cc3333" />
+                        <Cell fill="#808080" />
+                        <Cell fill="#a0a0a0" />
                       </Pie>
                       <Tooltip contentStyle={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: "8px", fontSize: "12px" }} />
                     </PieChart>
@@ -326,7 +326,7 @@ export default function Analytics() {
                 <div className="w-1/2 space-y-3">
                   {riskTrend.map((item, i) => (
                     <div key={item.name} className="flex items-center gap-3">
-                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: ["#ef4444", "#f59e0b", "#10b981"][i] }} />
+                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: ["#cc3333", "#808080", "#a0a0a0"][i] }} />
                       <div>
                         <p className="text-sm font-semibold">{item.value}</p>
                         <p className="text-xs text-muted-foreground">{item.name}</p>

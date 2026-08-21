@@ -62,7 +62,7 @@ export const getOrCreateSampleData = mutation({
       startDate: now - 30 * day,
       endDate: new Date(now + 60 * day).toISOString().split("T")[0],
       ownerId: teamUserIds[0],
-      color: "#3b82f6",
+      color: "#606060",
       createdAt: now - 30 * day,
       updatedAt: now,
     });
@@ -75,7 +75,7 @@ export const getOrCreateSampleData = mutation({
       startDate: now - 15 * day,
       endDate: new Date(now + 75 * day).toISOString().split("T")[0],
       ownerId: teamUserIds[1],
-      color: "#8b5cf6",
+      color: "#808080",
       createdAt: now - 15 * day,
       updatedAt: now,
     });
@@ -88,7 +88,7 @@ export const getOrCreateSampleData = mutation({
       startDate: now + 10 * day,
       endDate: new Date(now + 100 * day).toISOString().split("T")[0],
       ownerId: teamUserIds[2],
-      color: "#ef4444",
+      color: "#cc3333",
       createdAt: now - 5 * day,
       updatedAt: now,
     });
@@ -167,7 +167,7 @@ export const getOrCreateSampleData = mutation({
       description: "Complete dashboard with KPIs, charts, and analytics views",
       status: "in-progress",
       priority: "high",
-      color: "#3b82f6",
+      color: "#606060",
       createdAt: now - 25 * day,
       updatedAt: now,
     });
@@ -178,7 +178,7 @@ export const getOrCreateSampleData = mutation({
       description: "Risk identification, assessment, and mitigation tracking",
       status: "in-progress",
       priority: "high",
-      color: "#ef4444",
+      color: "#cc3333",
       createdAt: now - 20 * day,
       updatedAt: now,
     });
@@ -189,7 +189,7 @@ export const getOrCreateSampleData = mutation({
       description: "AI-powered insights and recommendations system",
       status: "todo",
       priority: "critical",
-      color: "#8b5cf6",
+      color: "#808080",
       createdAt: now - 15 * day,
       updatedAt: now,
     });

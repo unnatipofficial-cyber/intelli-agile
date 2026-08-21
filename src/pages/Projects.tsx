@@ -226,7 +226,7 @@ export default function Projects() {
                 <div className="flex items-start justify-between mb-3">
                   <div
                     className="w-10 h-10 rounded-xl flex items-center justify-center"
-                    style={{ backgroundColor: `${project.color || "#2563eb"}15`, color: project.color || "#2563eb" }}
+                    style={{ backgroundColor: `${project.color || "#606060"}15`, color: project.color || "#606060" }}
                   >
                     <FolderKanban className="w-5 h-5" />
                   </div>
