@@ -1,3 +1,4 @@
+import { cssVar } from "@/lib/theme-colors";
 import { useState, useMemo } from "react";
 import { useQuery } from "convex/react";
 import { api } from "../convex/_generated/api";
@@ -28,7 +29,7 @@ import {
   Legend,
 } from "recharts";
 
-const COLORS = ["#606060", "#476666", "#909090", "#a8a8a8", "#c0c0c0", "#cc3333"];
+const COLORS = [cssVar("--chart-1"), cssVar("--chart-2"), cssVar("--chart-3"), cssVar("--chart-4"), cssVar("--chart-5"), cssVar("--destructive")];
 
 export default function Analytics() {
   const projects = useQuery(api.projects.list);
@@ -157,7 +158,7 @@ export default function Analytics() {
                   <XAxis dataKey="sprintName" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
                   <YAxis tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
                   <Tooltip contentStyle={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: "8px", fontSize: "12px" }} />
-                  <Bar dataKey="velocity" fill="#606060" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="velocity" fill={cssVar("--chart-1")} radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             ) : (
@@ -182,8 +183,8 @@ export default function Analytics() {
                   <ResponsiveContainer width="100%" height={200}>
                     <PieChart>
                       <Pie data={taskCompletion} cx="50%" cy="50%" innerRadius={50} outerRadius={75} paddingAngle={3} dataKey="value">
-                        <Cell fill="#a0a0a0" />
-                        <Cell fill="#d0d0d0" />
+                        <Cell fill={cssVar("--chart-3")} />
+                        <Cell fill={cssVar("--muted")} />
                       </Pie>
                       <Tooltip contentStyle={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: "8px", fontSize: "12px" }} />
                     </PieChart>
@@ -230,8 +231,8 @@ export default function Analytics() {
                   <YAxis tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
                   <Tooltip contentStyle={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: "8px", fontSize: "12px" }} />
                   <Legend />
-                  <Bar dataKey="completed" stackId="a" fill="#a0a0a0" name="Completed" radius={[0, 0, 0, 0]} />
-                  <Bar dataKey="remaining" stackId="a" fill="#d0d0d0" name="Remaining" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="completed" stackId="a" fill={cssVar("--chart-3")} name="Completed" radius={[0, 0, 0, 0]} />
+                  <Bar dataKey="remaining" stackId="a" fill={cssVar("--muted")} name="Remaining" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             ) : (
@@ -292,8 +293,8 @@ export default function Analytics() {
                   <YAxis tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
                   <Tooltip contentStyle={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: "8px", fontSize: "12px" }} />
                   <Legend />
-                  <Bar dataKey="active" fill="#a0a0a0" name="Active" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="completed" fill="#a0a0a0" name="Completed" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="active" fill={cssVar("--chart-3")} name="Active" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="completed" fill={cssVar("--chart-3")} name="Completed" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             ) : (
@@ -315,9 +316,9 @@ export default function Analytics() {
                   <ResponsiveContainer width="100%" height={200}>
                     <PieChart>
                       <Pie data={riskTrend} cx="50%" cy="50%" innerRadius={50} outerRadius={75} paddingAngle={3} dataKey="value">
-                        <Cell fill="#cc3333" />
-                        <Cell fill="#808080" />
-                        <Cell fill="#a0a0a0" />
+                        <Cell fill={cssVar("--destructive")} />
+                        <Cell fill={cssVar("--chart-4")} />
+                        <Cell fill={cssVar("--chart-3")} />
                       </Pie>
                       <Tooltip contentStyle={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: "8px", fontSize: "12px" }} />
                     </PieChart>

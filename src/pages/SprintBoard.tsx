@@ -1,3 +1,4 @@
+import { cssVar } from "@/lib/theme-colors";
 import { useState, useMemo, useCallback } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../convex/_generated/api";
@@ -18,10 +19,10 @@ import {
 import { toast } from "sonner";
 
 const columns = [
-  { id: "todo", label: "To Do", icon: Clock, color: "#b0b0b0", bgColor: "bg-gray-100 dark:bg-gray-800/30" },
-  { id: "in-progress", label: "In Progress", icon: Loader2, color: "#606060", bgColor: "bg-gray-100 dark:bg-gray-800/30" },
-  { id: "review", label: "Review", icon: Eye, color: "#808080", bgColor: "bg-gray-100 dark:bg-gray-800/20" },
-  { id: "done", label: "Done", icon: CheckCircle2, color: "#a0a0a0", bgColor: "bg-gray-100 dark:bg-gray-800/20" },
+  { id: "todo", label: "To Do", icon: Clock, color: cssVar("--muted-foreground"), bgColor: "bg-gray-100 dark:bg-gray-800/30" },
+  { id: "in-progress", label: "In Progress", icon: Loader2, color: cssVar("--chart-1"), bgColor: "bg-gray-100 dark:bg-gray-800/30" },
+  { id: "review", label: "Review", icon: Eye, color: cssVar("--chart-4"), bgColor: "bg-gray-100 dark:bg-gray-800/20" },
+  { id: "done", label: "Done", icon: CheckCircle2, color: cssVar("--chart-3"), bgColor: "bg-gray-100 dark:bg-gray-800/20" },
 ] as const;
 
 const priorityColors: Record<string, string> = {

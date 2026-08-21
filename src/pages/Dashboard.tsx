@@ -1,3 +1,4 @@
+import { cssVar } from "@/lib/theme-colors";
 import { useState, useEffect, useMemo } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../convex/_generated/api";
@@ -42,11 +43,11 @@ import {
 } from "recharts";
 
 const COLORS = {
-  primary: "#606060",
-  secondary: "#476666",
-  tertiary: "#909090",
-  quaternary: "#a8a8a8",
-  quinary: "#c0c0c0",
+  get primary() { return cssVar("--chart-1"); },
+  get secondary() { return cssVar("--chart-2"); },
+  get tertiary() { return cssVar("--chart-3"); },
+  get quaternary() { return cssVar("--chart-4"); },
+  get quinary() { return cssVar("--chart-5"); },
 };
 
 function KpiCard({
@@ -331,10 +332,10 @@ export default function Dashboard() {
   const taskDistribution = useMemo(() => {
     if (!stats) return [];
     return [
-      { name: "Done", value: stats.completed, color: "#a0a0a0" },
-      { name: "In Progress", value: stats.inProgress, color: "#606060" },
-      { name: "Review", value: stats.review, color: "#808080" },
-      { name: "To Do", value: stats.todo, color: "#b0b0b0" },
+      { name: "Done", value: stats.completed, color: cssVar("--chart-5") },
+      { name: "In Progress", value: stats.inProgress, color: cssVar("--chart-1") },
+      { name: "Review", value: stats.review, color: cssVar("--chart-3") },
+      { name: "To Do", value: stats.todo, color: cssVar("--muted") },
     ];
   }, [stats]);
 

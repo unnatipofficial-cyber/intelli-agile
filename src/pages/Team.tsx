@@ -1,3 +1,4 @@
+import { cssVar } from "@/lib/theme-colors";
 import { useState, useMemo } from "react";
 import { useQuery } from "convex/react";
 import { api } from "../convex/_generated/api";
@@ -95,8 +96,8 @@ export default function Team() {
                     fontSize: "12px",
                   }}
                 />
-                <Bar dataKey="active" fill="#606060" radius={[4, 4, 0, 0]} name="Active SP" />
-                <Bar dataKey="completed" fill="#a0a0a0" radius={[4, 4, 0, 0]} name="Completed SP" />
+                <Bar dataKey="active" fill={cssVar("--chart-1")} radius={[4, 4, 0, 0]} name="Active SP" />
+                <Bar dataKey="completed" fill={cssVar("--chart-3")} radius={[4, 4, 0, 0]} name="Completed SP" />
               </BarChart>
             </ResponsiveContainer>
           </div>
