@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { query } from "./_generated/server";
+import { safeGet } from "./helpers";
 
 interface Insight {
   id: string;
@@ -53,7 +54,7 @@ export const generate = query({
           id: `insight-${++insightCounter}`,
           severity: progress < expectedProgress - 25 ? "critical" : "high",
           title: "Sprint may be at risk",
-          description: `Completion rate is ${Math.round(expectedProgress - progress)}% below expected velocity. Only ${Math.round(progress)}% complete with ${Math.round((remainingdays(activeSprint.endDate)) )} days remaining.`,
+          description: `Completion rate is ${Math.round(expectedProgress - progress)}% below expected velocity. Only ${Math.round(progress)}% complete with ${Math.round(remainingdays(activeSprint.endDate))} days remaining.`,
           recommendedAction: "Consider moving low-priority tasks to the next sprint or increasing team capacity.",
           category: "sprint",
         });
@@ -124,14 +125,14 @@ export const generate = query({
 
       for (const [userId, load] of Object.entries(teamWorkload)) {
         if (load > avgWorkload * 1.8 && load > 6) {
-          const userDoc = await ctx.db.get(userId as any as any);
-          const userName = userDoc && 'name' in userDoc ? (userDoc as any).name : "Team member";
+          const userDoc = await safeGet(ctx, userId);
+          const userName = userDoc && "name" in userDoc ? userDoc.name : "Team member";
           insights.push({
             id: `insight-${++insightCounter}`,
             severity: "high",
             title: `${userName} has unusually high workload`,
-          description: `Currently assigned ${load} story points in the active sprint, ${Math.round((load / avgWorkload) * 100 - 100)}% above the team average of ${Math.round(avgWorkload)} SP.`,
-          recommendedAction: `Consider redistributing ${Math.round(load - avgWorkload)} story points to balance workload.`,
+            description: `Currently assigned ${load} story points in the active sprint, ${Math.round((load / avgWorkload) * 100 - 100)}% above the team average of ${Math.round(avgWorkload)} SP.`,
+            recommendedAction: `Consider redistributing ${Math.round(load - avgWorkload)} story points to balance workload.`,
             category: "workload",
           });
         }
@@ -161,8 +162,9 @@ export const generate = query({
       insights.push({
         id: `insight-${++insightCounter}`,
         severity: "medium",
-        title: "Multiple high-severity risks open",          description: `${highRisks.length} high-severity risks remain open. Their combined impact could affect sprint goals.`,
-          recommendedAction: "Review mitigation strategies and ensure each risk has a clear owner and action plan.",
+        title: "Multiple high-severity risks open",
+        description: `${highRisks.length} high-severity risks remain open. Their combined impact could affect sprint goals.`,
+        recommendedAction: "Review mitigation strategies and ensure each risk has a clear owner and action plan.",
         category: "risk",
       });
     }
@@ -171,9 +173,10 @@ export const generate = query({
     if (insights.length === 0) {
       insights.push({
         id: `insight-${++insightCounter}`,
-        severity: "low",          title: "Project is on track",
-          description: "All metrics are within healthy ranges. Sprint progress, team workload, and risk levels are stable.",
-          recommendedAction: "Continue the current pace. No immediate action required.",
+        severity: "low",
+        title: "Project is on track",
+        description: "All metrics are within healthy ranges. Sprint progress, team workload, and risk levels are stable.",
+        recommendedAction: "Continue the current pace. No immediate action required.",
         category: "sprint",
       });
     }

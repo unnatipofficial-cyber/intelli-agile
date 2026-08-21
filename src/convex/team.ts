@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { query } from "./_generated/server";
+import { safeGet } from "./helpers";
 
 export const listMembers = query({
   args: {},
@@ -32,7 +33,7 @@ export const getWorkload = query({
 
     const results = await Promise.all(
       members.map(async (member) => {
-        const user = await ctx.db.get(member.userId);
+        const user = await safeGet(ctx, member.userId);
         const assignedTasks = allTasks.filter((t) => t.assigneeId === member.userId);
         const completedTasks = assignedTasks.filter((t) => t.status === "done");
         const activeTasks = activeSprint

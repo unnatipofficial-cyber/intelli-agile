@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
+import { safeGet } from "./helpers";
 
 export const list = query({
   args: { projectId: v.id("projects") },
@@ -10,7 +11,7 @@ export const list = query({
       .collect();
     const results = await Promise.all(
       risks.map(async (risk) => {
-        const owner = risk.ownerId ? await ctx.db.get(risk.ownerId) : null;
+        const owner = risk.ownerId ? await safeGet(ctx, risk.ownerId) : null;
         return { ...risk, owner };
       })
     );
@@ -23,7 +24,7 @@ export const get = query({
   handler: async (ctx, args) => {
     const risk = await ctx.db.get(args.riskId);
     if (!risk) return null;
-    const owner = risk.ownerId ? await ctx.db.get(risk.ownerId) : null;
+    const owner = risk.ownerId ? await safeGet(ctx, risk.ownerId) : null;
     return { ...risk, owner };
   },
 });

@@ -1,17 +1,26 @@
+import { getAuthUserId } from "@convex-dev/auth/server";
 import { mutation } from "./_generated/server";
 
 export const getOrCreateSampleData = mutation({
   args: {},
   handler: async (ctx) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new Error("Not authenticated");
+    const userId = await getAuthUserId(ctx);
+    if (!userId) throw new Error("Not authenticated");
+
+    // Ensure a user record exists for the current user (anonymous guests may not have one)
+    const existingUser = await ctx.db.get(userId);
+    if (!existingUser) {
+      await ctx.db.insert("users", {
+        name: "Guest User",
+        isAnonymous: true,
+      });
+    }
 
     const existingProjects = await ctx.db.query("projects").collect();
     if (existingProjects.length > 0) return { seeded: false, message: "Data already exists" };
 
     const now = Date.now();
     const day = 86400000;
-    const userId = identity.subject as any;
 
     // Create team member users
     const teamNames = [
@@ -23,9 +32,14 @@ export const getOrCreateSampleData = mutation({
       { name: "Elena Rodriguez", email: "elena@aie.dev", jobTitle: "QA Lead", department: "Quality Assurance" },
     ];
 
+    // First team member is the current (guest) user
     const teamUserIds: any[] = [userId];
+
     for (const tm of teamNames) {
-      const existing = await ctx.db.query("users").withIndex("email", (q) => q.eq("email", tm.email)).first();
+      const existing = await ctx.db
+        .query("users")
+        .withIndex("email", (q) => q.eq("email", tm.email))
+        .first();
       if (existing) {
         teamUserIds.push(existing._id);
       } else {

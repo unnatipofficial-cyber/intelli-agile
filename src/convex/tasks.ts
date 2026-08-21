@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
+import { safeGet } from "./helpers";
 
 export const list = query({
   args: { projectId: v.id("projects") },
@@ -10,8 +11,8 @@ export const list = query({
       .collect();
     const results = await Promise.all(
       tasks.map(async (task) => {
-        const assignee = task.assigneeId ? await ctx.db.get(task.assigneeId) : null;
-        const sprint = task.sprintId ? await ctx.db.get(task.sprintId) : null;
+        const assignee = task.assigneeId ? await safeGet(ctx, task.assigneeId) : null;
+        const sprint = task.sprintId ? await safeGet(ctx, task.sprintId) : null;
         return { ...task, assignee, sprint };
       })
     );
@@ -28,7 +29,7 @@ export const listBySprint = query({
       .collect();
     const results = await Promise.all(
       tasks.map(async (task) => {
-        const assignee = task.assigneeId ? await ctx.db.get(task.assigneeId) : null;
+        const assignee = task.assigneeId ? await safeGet(ctx, task.assigneeId) : null;
         return { ...task, assignee };
       })
     );
@@ -46,7 +47,7 @@ export const listBacklog = query({
     const backlog = tasks.filter((t) => !t.sprintId);
     const results = await Promise.all(
       backlog.map(async (task) => {
-        const assignee = task.assigneeId ? await ctx.db.get(task.assigneeId) : null;
+        const assignee = task.assigneeId ? await safeGet(ctx, task.assigneeId) : null;
         return { ...task, assignee };
       })
     );
@@ -59,8 +60,8 @@ export const get = query({
   handler: async (ctx, args) => {
     const task = await ctx.db.get(args.taskId);
     if (!task) return null;
-    const assignee = task.assigneeId ? await ctx.db.get(task.assigneeId) : null;
-    const sprint = task.sprintId ? await ctx.db.get(task.sprintId) : null;
+    const assignee = task.assigneeId ? await safeGet(ctx, task.assigneeId) : null;
+    const sprint = task.sprintId ? await safeGet(ctx, task.sprintId) : null;
     return { ...task, assignee, sprint };
   },
 });
