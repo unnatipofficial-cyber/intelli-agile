@@ -58,7 +58,7 @@ export default function SettingsPage() {
     <div className="space-y-6 animate-fade-in-up max-w-4xl">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Settings</h1>
-        <p className="text-sm text-muted-foreground">Manage your preferences and notifications</p>
+        <p className="text-sm text-muted-foreground">Manage notifications, appearance, and account settings</p>
       </div>
 
       {/* Profile */}

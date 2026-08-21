@@ -51,7 +51,7 @@ export default function Team() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Team</h1>
-          <p className="text-sm text-muted-foreground">Team members and workload distribution</p>
+          <p className="text-sm text-muted-foreground">Workload visibility and capacity tracking</p>
         </div>
       </div>
 
@@ -170,7 +170,7 @@ export default function Team() {
       {!workload?.length && (
         <div className="text-center py-12">
           <Users className="w-12 h-12 text-muted-foreground/30 mx-auto mb-3" />
-          <p className="text-muted-foreground text-sm">No team members in this project</p>
+          <p className="text-muted-foreground text-sm">No team members assigned yet</p>
         </div>
       )}
     </div>

@@ -66,8 +66,8 @@ export const generate = query({
           id: `insight-${++insightCounter}`,
           severity: "high",
           title: "Too many tasks remain incomplete",
-          description: `${incompleteTasks.length} of ${sprintTasks.length} tasks are still not done, with ${Math.round(remainingdays(activeSprint.endDate))} days remaining in the sprint.`,
-          recommendedAction: "Prioritize critical tasks and defer lower-priority items. Consider pairing on blocked tasks.",
+          description: `${incompleteTasks.length} of ${sprintTasks.length} tasks remain incomplete with ${Math.round(remainingdays(activeSprint.endDate))} days left in the sprint.`,
+          recommendedAction: "Prioritize critical items, defer lower-priority work, and consider pairing on blocked tasks.",
           category: "sprint",
         });
       }
@@ -103,7 +103,7 @@ export const generate = query({
           id: `insight-${++insightCounter}`,
           severity: "high",
           title: "Sprint velocity is decreasing",
-          description: `Velocity has declined over the last ${velocities.length} sprints: ${velocities.join(" → ")} story points. This trend may indicate team capacity issues.`,
+          description: `Velocity has declined over the last ${velocities.length} sprints: ${velocities.join(" → ")} story points. This trend may indicate capacity or blocker issues.`,
           recommendedAction: "Review team workload, identify blockers, and consider adjusting sprint capacity or scope.",
           category: "velocity",
         });
@@ -130,8 +130,8 @@ export const generate = query({
             id: `insight-${++insightCounter}`,
             severity: "high",
             title: `${userName} has unusually high workload`,
-            description: `Currently assigned ${load} story points in the active sprint, which is ${Math.round((load / avgWorkload) * 100 - 100)}% above the team average of ${Math.round(avgWorkload)} SP.`,
-            recommendedAction: `Consider redistributing ${Math.round(load - avgWorkload)} story points to other team members.`,
+          description: `Currently assigned ${load} story points in the active sprint, ${Math.round((load / avgWorkload) * 100 - 100)}% above the team average of ${Math.round(avgWorkload)} SP.`,
+          recommendedAction: `Consider redistributing ${Math.round(load - avgWorkload)} story points to balance workload.`,
             category: "workload",
           });
         }
@@ -151,7 +151,7 @@ export const generate = query({
         severity: "critical",
         title: `${openCriticalRisks.length} critical risk${openCriticalRisks.length > 1 ? "s require" : " requires"} immediate attention`,
         description: `Open critical risks include: ${openCriticalRisks.map((r) => r.title).join(", ")}. These pose significant threats to project success.`,
-        recommendedAction: "Schedule a risk review meeting and assign mitigation owners with clear deadlines.",
+        recommendedAction: "Schedule a risk review meeting, assign mitigation owners, and set clear deadlines.",
         category: "risk",
       });
     }
@@ -161,9 +161,8 @@ export const generate = query({
       insights.push({
         id: `insight-${++insightCounter}`,
         severity: "medium",
-        title: "Multiple high-severity risks open",
-        description: `${highRisks.length} high-severity risks remain open. Combined impact could significantly affect sprint goals.`,
-        recommendedAction: "Review mitigation strategies and ensure each risk has a clear owner and action plan.",
+        title: "Multiple high-severity risks open",          description: `${highRisks.length} high-severity risks remain open. Their combined impact could affect sprint goals.`,
+          recommendedAction: "Review mitigation strategies and ensure each risk has a clear owner and action plan.",
         category: "risk",
       });
     }
@@ -172,10 +171,9 @@ export const generate = query({
     if (insights.length === 0) {
       insights.push({
         id: `insight-${++insightCounter}`,
-        severity: "low",
-        title: "Project is on track",
-        description: "All metrics are within healthy ranges. Sprint progress, team workload, and risk levels are stable.",
-        recommendedAction: "Continue monitoring and maintain current pace.",
+        severity: "low",          title: "Project is on track",
+          description: "All metrics are within healthy ranges. Sprint progress, team workload, and risk levels are stable.",
+          recommendedAction: "Continue the current pace. No immediate action required.",
         category: "sprint",
       });
     }

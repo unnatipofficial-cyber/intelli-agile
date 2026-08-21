@@ -116,7 +116,7 @@ export default function Analytics() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Analytics</h1>
-          <p className="text-sm text-muted-foreground">Project metrics and performance insights</p>
+          <p className="text-sm text-muted-foreground">Velocities, burndowns, and workload analytics</p>
         </div>
       </div>
 

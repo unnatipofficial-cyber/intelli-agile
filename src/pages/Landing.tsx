@@ -20,40 +20,40 @@ const features = [
   {
     icon: Brain,
     title: "AIE Intelligence",
-    description: "AI-powered insights that analyze your project data and provide actionable recommendations.",
+    description: "Analyze project data in real time. Receive actionable recommendations on sprint health, team capacity, and risk exposure.",
   },
   {
     icon: Columns3,
     title: "Sprint Board",
-    description: "Visual Kanban board with drag-and-drop for managing tasks across your workflow.",
+    description: "A visual Kanban interface with drag-and-drop. Move tasks across To Do, In Progress, Review, and Done.",
   },
   {
     icon: BarChart3,
     title: "Analytics & Reports",
-    description: "Comprehensive charts and reports for velocity, burndown, workload, and progress tracking.",
+    description: "Velocity trends, burndown charts, workload distribution, and progress metrics — updated as your team works.",
   },
   {
     icon: ShieldAlert,
     title: "Risk Management",
-    description: "Identify, assess, and mitigate risks with an interactive probability-impact matrix.",
+    description: "Map risks on an interactive probability-impact matrix. Track severity, owners, and mitigation strategies.",
   },
   {
     icon: Users,
     title: "Team Workload",
-    description: "Visualize team capacity and prevent burnout with intelligent workload tracking.",
+    description: "See who is overloaded and who has capacity. Balance assignments across your team with clear visual indicators.",
   },
   {
     icon: Target,
-    title: "Backlog Management",
-    description: "Full Agile backlog with epics, stories, tasks, bugs, and smart filtering.",
+    title: "Backlog & Tasks",
+    description: "Organize work with epics, user stories, tasks, and bugs. Filter by priority, status, assignee, or sprint.",
   },
 ];
 
 const stats = [
-  { value: "2.5x", label: "Faster Delivery" },
-  { value: "40%", label: "Less Overhead" },
-  { value: "98%", label: "Sprint Success" },
-  { value: "100%", label: "Visibility" },
+  { value: "3", label: "Projects" },
+  { value: "34", label: "Tasks Tracked" },
+  { value: "6", label: "Risks Monitored" },
+  { value: "∞", label: "Insights" },
 ];
 
 export default function Landing() {
@@ -116,15 +116,15 @@ export default function Landing() {
             </h1>
 
             <p className="text-base sm:text-lg text-muted-foreground max-w-xl mx-auto mb-8 leading-relaxed">
-              AIE is an intelligent Agile project-management platform that helps teams manage projects, sprints, tasks, and risks — while an AI engine provides insights and early warnings.
+              AIE is an intelligent Agile platform that helps software teams plan sprints, manage tasks, track progress, and analyze risks — while an AI engine surfaces insights and early warnings before problems escalate.
             </p>
 
             <div className="flex items-center justify-center gap-3">
               <Button size="lg" onClick={() => navigate("/auth")} className="gap-2 px-6">
-                Start Free <ArrowRight className="w-4 h-4" />
+                Open Dashboard <ArrowRight className="w-4 h-4" />
               </Button>
               <Button size="lg" variant="outline" onClick={() => navigate("/auth")} className="gap-2 px-6">
-                View Demo
+                Sign In
               </Button>
             </div>
           </motion.div>
@@ -161,9 +161,9 @@ export default function Landing() {
             viewport={{ once: true }}
             className="text-center mb-12"
           >
-            <h2 className="text-2xl sm:text-3xl font-bold tracking-tight mb-3">Everything you need to manage Agile</h2>
+            <h2 className="text-2xl sm:text-3xl font-bold tracking-tight mb-3">Built for how software teams actually work</h2>
             <p className="text-sm text-muted-foreground max-w-lg mx-auto">
-              Built for modern software teams. From sprint planning to risk prediction.
+              From sprint planning to risk prediction, AIE gives your team a single place to plan, execute, and understand progress.
             </p>
           </motion.div>
 
@@ -203,13 +203,13 @@ export default function Landing() {
                 <Zap className="w-6 h-6 text-white" />
               </div>
               <h2 className="text-2xl sm:text-3xl font-bold tracking-tight mb-3">
-                Ready to build smarter?
+                Start managing smarter today
               </h2>
               <p className="text-sm text-muted-foreground max-w-md mx-auto mb-6">
-                Join teams using AIE to manage sprints, track risks, and get AI-powered insights for faster delivery.
+                AIE helps your team ship faster with clear sprint visibility, intelligent risk tracking, and AI-powered recommendations.
               </p>
               <Button size="lg" onClick={() => navigate("/auth")} className="gap-2 px-8">
-                Get Started Free <ArrowRight className="w-4 h-4" />
+                Open AIE <ArrowRight className="w-4 h-4" />
               </Button>
             </div>
           </motion.div>
@@ -223,7 +223,7 @@ export default function Landing() {
             <Zap className="w-4 h-4 text-primary" />
             <span className="text-xs font-semibold">AIE</span>
           </div>
-          <p className="text-xs text-muted-foreground">© 2026 AIE. Agile Intelligence Engine.</p>
+          <p className="text-xs text-muted-foreground">© 2026 Agile Intelligence Engine. All rights reserved.</p>
         </div>
       </footer>
     </div>

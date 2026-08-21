@@ -73,7 +73,7 @@ function KpiCard({
         <div className="flex items-start justify-between">
           <div>
             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{label}</p>
-            <p className="text-2xl lg:text-3xl font-bold mt-1 tracking-tight">{value}</p>
+            <p className="text-2xl lg:text-3xl font-bold mt-1 tracking-tight tabular-nums">{value}</p>
             {subtext && <p className="text-xs text-muted-foreground mt-1">{subtext}</p>}
           </div>
           <div
@@ -299,9 +299,9 @@ export default function Dashboard() {
         </div>
         <h2 className="text-xl font-bold mb-2">Welcome to AIE</h2>
         <p className="text-muted-foreground text-sm max-w-md mb-6">
-          Your Agile Intelligence Engine is being set up with sample data...
+          Your workspace is ready. Load sample data to explore the dashboard.
         </p>
-        <Button onClick={() => seedData()}>Initialize Sample Data</Button>
+        <Button onClick={() => seedData()}>Load Sample Data</Button>
       </div>
     );
   }
@@ -312,10 +312,10 @@ export default function Dashboard() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">
-            Welcome{user?.name ? `, ${user.name}` : ""}
+            Welcome back{user?.name ? `, ${user.name}` : ""}
           </h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Here's your project overview for today
+            Here is your project overview
           </p>
         </div>
         {projects && projects.length > 0 && (

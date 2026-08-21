@@ -247,7 +247,7 @@ export default function Backlog() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Backlog</h1>
-          <p className="text-sm text-muted-foreground">Manage your project backlog</p>
+          <p className="text-sm text-muted-foreground">Organize and prioritize work items</p>
         </div>
         <Button onClick={() => { setEditingTask(null); setShowForm(true); }} className="gap-2">
           <Plus className="w-4 h-4" /> Add Item
@@ -371,7 +371,7 @@ export default function Backlog() {
           <p className="text-muted-foreground text-sm">
             {search || filterPriority !== "all" || filterStatus !== "all"
               ? "No items match your filters"
-              : "Backlog is empty. Add your first item!"}
+              : "Your backlog is empty. Add your first work item."}
           </p>
         </div>
       )}

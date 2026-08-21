@@ -193,7 +193,7 @@ export default function Projects() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Projects</h1>
-          <p className="text-sm text-muted-foreground">Manage your project workspaces</p>
+          <p className="text-sm text-muted-foreground">Plan, track, and manage your projects</p>
         </div>
         <Button onClick={() => { setEditingProject(null); setShowForm(true); }} className="gap-2">
           <Plus className="w-4 h-4" /> New Project
@@ -270,7 +270,7 @@ export default function Projects() {
         <div className="text-center py-12">
           <FolderKanban className="w-12 h-12 text-muted-foreground/30 mx-auto mb-3" />
           <p className="text-muted-foreground text-sm">
-            {search ? "No projects match your search" : "No projects yet. Create your first project!"}
+            {search ? "No projects match your search" : "No projects yet. Create your first project to get started."}
           </p>
         </div>
       )}

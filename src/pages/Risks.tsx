@@ -211,7 +211,7 @@ export default function Risks() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Risk Management</h1>
-          <p className="text-sm text-muted-foreground">Identify, assess, and mitigate project risks</p>
+          <p className="text-sm text-muted-foreground">Identify, assess, and mitigate risks across your project</p>
         </div>
         <Button onClick={() => { setEditingRisk(null); setShowForm(true); }} className="gap-2">
           <Plus className="w-4 h-4" /> New Risk
@@ -354,7 +354,7 @@ export default function Risks() {
       {!sortedRisks.length && (
         <div className="text-center py-12">
           <ShieldAlert className="w-12 h-12 text-muted-foreground/30 mx-auto mb-3" />
-          <p className="text-muted-foreground text-sm">No risks identified yet</p>
+          <p className="text-muted-foreground text-sm">No risks have been identified</p>
         </div>
       )}
 
