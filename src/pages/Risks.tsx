@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../convex/_generated/api";
 import { motion, AnimatePresence } from "framer-motion";
@@ -32,15 +32,6 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { insightSeverityStyles, severityStyles } from "@/lib/badge-colors";
-
-const severityColors: Record<string, { bg: string; text: string; badge: string }> = {
-  low: { bg: "", text: "", badge: "" },
-  medium: { bg: "", text: "", badge: "" },
-  high: { bg: "", text: "", badge: "" },
-  critical: { bg: "", text: "", badge: "" },
-};
-
-const sevStyle = (severity: string) => insightSeverityStyles[severity] || insightSeverityStyles.medium;
 
 const statusIcons: Record<string, any> = {
   open: AlertTriangle,
@@ -111,7 +102,8 @@ function RiskFormDialog({
         toast.success("Risk created");
       }
       onClose();
-    } catch {
+    } catch (err) {
+      console.error("Risk save error:", err);
       toast.error("Failed to save risk");
     }
     setLoading(false);
@@ -188,16 +180,17 @@ export default function Risks() {
   const [showForm, setShowForm] = useState(false);
   const [editingRisk, setEditingRisk] = useState<any>(null);
 
-  if (!selectedProjectId && projects && projects.length > 0) {
-    setSelectedProjectId(projects[0]._id);
-  }
+  useEffect(() => {
+    if (!selectedProjectId && projects && projects.length > 0) {
+      setSelectedProjectId(projects[0]._id);
+    }
+  }, [selectedProjectId, projects]);
 
   const sortedRisks = useMemo(() => {
     if (!risks) return [];
     return [...risks].sort((a, b) => b.score - a.score);
   }, [risks]);
 
-  // Risk matrix data
   const matrixRisks = useMemo(() => {
     if (!risks) return [];
     return risks.filter((r) => r.status === "open");
@@ -205,8 +198,13 @@ export default function Risks() {
 
   const handleDelete = async (id: string) => {
     if (!confirm("Delete this risk?")) return;
-    await deleteRisk({ riskId: id as any });
-    toast.success("Risk deleted");
+    try {
+      await deleteRisk({ riskId: id as any });
+      toast.success("Risk deleted");
+    } catch (err) {
+      console.error("Delete risk error:", err);
+      toast.error("Failed to delete risk");
+    }
   };
 
   return (
@@ -216,7 +214,7 @@ export default function Risks() {
           <h1 className="text-2xl font-bold tracking-tight">Risk Management</h1>
           <p className="text-sm text-muted-foreground">Identify, assess, and mitigate risks across your project</p>
         </div>
-        <Button onClick={() => { setEditingRisk(null); setShowForm(true); }} className="gap-2">
+        <Button onClick={() => { setEditingRisk(null); setShowForm(true); }} className="gap-2" disabled={!selectedProjectId}>
           <Plus className="w-4 h-4" /> New Risk
         </Button>
       </div>
@@ -250,11 +248,9 @@ export default function Risks() {
           <h3 className="text-sm font-bold mb-1">Risk Matrix</h3>
           <p className="text-xs text-muted-foreground mb-4">Probability vs Impact</p>
           <div className="relative">
-            {/* Y-axis label */}
             <div className="absolute -left-6 top-1/2 -translate-y-1/2 -rotate-90 text-[10px] text-muted-foreground font-medium whitespace-nowrap">
               Probability →
             </div>
-            {/* X-axis label */}
             <div className="text-center text-[10px] text-muted-foreground font-medium mb-2">Impact →</div>
             <div className="grid grid-cols-5 gap-1">
               {Array.from({ length: 5 }, (_, row) =>
@@ -269,13 +265,13 @@ export default function Risks() {
                   if (score >= 16) cellSeverity = "critical";
                   else if (score >= 10) cellSeverity = "high";
                   else if (score >= 5) cellSeverity = "medium";
-                  const cellStyle = sevStyle(cellSeverity);
+                  const sevStyle = insightSeverityStyles[cellSeverity] || insightSeverityStyles.low;
 
                   return (
                     <div
                       key={`${row}-${col}`}
                       className="aspect-square rounded-lg flex flex-col items-center justify-center text-[10px] relative"
-                      style={{ backgroundColor: cellStyle.bg, ...(cellRisks.length > 0 ? { boxShadow: `0 0 0 2px var(--primary)30` } : {}) }}
+                      style={{ backgroundColor: sevStyle.bg, ...(cellRisks.length > 0 ? { boxShadow: `0 0 0 2px var(--primary)30` } : {}) }}
                     >
                       <span className="font-semibold">{score}</span>
                       {cellRisks.length > 0 && (
@@ -289,12 +285,11 @@ export default function Risks() {
               )}
             </div>
           </div>
-          {/* Legend */}
           <div className="flex items-center justify-center gap-3 mt-4 text-[10px] text-muted-foreground">
-            <div className="flex items-center gap-1"><div className="w-3 h-3 rounded" style={{ backgroundColor: sevStyle("low").bg }} /> Low</div>
-            <div className="flex items-center gap-1"><div className="w-3 h-3 rounded" style={{ backgroundColor: sevStyle("medium").bg }} /> Medium</div>
-            <div className="flex items-center gap-1"><div className="w-3 h-3 rounded" style={{ backgroundColor: sevStyle("high").bg }} /> High</div>
-            <div className="flex items-center gap-1"><div className="w-3 h-3 rounded" style={{ backgroundColor: sevStyle("critical").bg }} /> Critical</div>
+            <div className="flex items-center gap-1"><div className="w-3 h-3 rounded" style={{ backgroundColor: insightSeverityStyles.low.bg }} /> Low</div>
+            <div className="flex items-center gap-1"><div className="w-3 h-3 rounded" style={{ backgroundColor: insightSeverityStyles.medium.bg }} /> Medium</div>
+            <div className="flex items-center gap-1"><div className="w-3 h-3 rounded" style={{ backgroundColor: insightSeverityStyles.high.bg }} /> High</div>
+            <div className="flex items-center gap-1"><div className="w-3 h-3 rounded" style={{ backgroundColor: insightSeverityStyles.critical.bg }} /> Critical</div>
           </div>
         </motion.div>
 
@@ -303,7 +298,7 @@ export default function Risks() {
           <AnimatePresence>
             {sortedRisks.map((risk, i) => {
               const StatusIcon = statusIcons[risk.status] || AlertTriangle;
-              const sev = sevStyle(risk.severity);
+              const sev = insightSeverityStyles[risk.severity] || insightSeverityStyles.medium;
               return (
                 <motion.div
                   key={risk._id}

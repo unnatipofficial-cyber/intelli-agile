@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../convex/_generated/api";
 import { motion, AnimatePresence } from "framer-motion";
@@ -204,9 +204,11 @@ export default function Backlog() {
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [filterType, setFilterType] = useState<string>("all");
 
-  if (!selectedProjectId && projects && projects.length > 0) {
-    setSelectedProjectId(projects[0]._id);
-  }
+  useEffect(() => {
+    if (!selectedProjectId && projects && projects.length > 0) {
+      setSelectedProjectId(projects[0]._id);
+    }
+  }, [selectedProjectId, projects]);
 
   const backlogItems = useMemo(() => {
     if (!backlogTasks) return [];

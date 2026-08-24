@@ -1,5 +1,5 @@
 import { cssVar } from "@/lib/theme-colors";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery } from "convex/react";
 import { api } from "../convex/_generated/api";
 import { motion } from "framer-motion";
@@ -32,9 +32,11 @@ export default function Team() {
     selectedProjectId ? { projectId: selectedProjectId as any } : "skip"
   );
 
-  if (!selectedProjectId && projects && projects.length > 0) {
-    setSelectedProjectId(projects[0]._id);
-  }
+  useEffect(() => {
+    if (!selectedProjectId && projects && projects.length > 0) {
+      setSelectedProjectId(projects[0]._id);
+    }
+  }, [selectedProjectId, projects]);
 
   const chartData = useMemo(() => {
     if (!workload) return [];

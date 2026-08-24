@@ -5,6 +5,7 @@ import { useTheme } from "@/hooks/use-theme";
 import { cn } from "@/lib/utils";
 import { FloatingDock, dockNavItems } from "@/components/FloatingDock";
 import { AIELogo } from "@/components/AIELogo";
+import AIChat from "@/components/AIChat";
 import {
   Moon,
   Sun,
@@ -123,6 +124,9 @@ export default function AppLayout({ children }: { children: ReactNode }) {
       <main className="p-4 lg:p-6 pb-24 md:pb-8">
         {children}
       </main>
+
+      {/* AI Chat assistant */}
+      <AIChat />
 
       {/* Floating dock — anchored to bottom */}
       <div className="fixed bottom-0 left-0 right-0 z-30 flex justify-center pointer-events-none">

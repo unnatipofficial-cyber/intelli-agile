@@ -1,5 +1,5 @@
 import { cssVar } from "@/lib/theme-colors";
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../convex/_generated/api";
 import { motion, AnimatePresence } from "framer-motion";
@@ -126,9 +126,11 @@ export default function SprintBoard() {
   const updateStatus = useMutation(api.tasks.updateStatus);
   const moveSprint = useMutation(api.tasks.moveToSprint);
 
-  if (!selectedProjectId && projects && projects.length > 0) {
-    setSelectedProjectId(projects[0]._id);
-  }
+  useEffect(() => {
+    if (!selectedProjectId && projects && projects.length > 0) {
+      setSelectedProjectId(projects[0]._id);
+    }
+  }, [selectedProjectId, projects]);
 
   const tasksByStatus = useMemo(() => {
     const result: Record<string, any[]> = { todo: [], "in-progress": [], review: [], done: [] };

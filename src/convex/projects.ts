@@ -1,3 +1,4 @@
+import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
 import { safeGet } from "./helpers";
@@ -5,8 +6,6 @@ import { safeGet } from "./helpers";
 export const list = query({
   args: {},
   handler: async (ctx) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) return [];
     const projects = await ctx.db.query("projects").collect();
     const results = await Promise.all(
       projects.map(async (project) => {
@@ -65,23 +64,23 @@ export const create = mutation({
     color: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new Error("Not authenticated");
+    const userId = await getAuthUserId(ctx);
+    if (!userId) throw new Error("Not authenticated");
     const now = Date.now();
     const projectId = await ctx.db.insert("projects", {
       ...args,
-      ownerId: identity.subject as any,
+      ownerId: userId,
       createdAt: now,
       updatedAt: now,
     });
     await ctx.db.insert("projectMembers", {
       projectId,
-      userId: identity.subject as any,
+      userId: userId,
       role: "owner",
       joinedAt: now,
     });
     await ctx.db.insert("activityLogs", {
-      userId: identity.subject as any,
+      userId: userId,
       projectId,
       action: `created project ${args.name}`,
       entityType: "project",
