@@ -77,7 +77,11 @@ class RootErrorBoundary extends React.Component<
   }
 }
 
-const convex = new ConvexReactClient(import.meta.env.VITE_CONVEX_URL as string);
+const convexUrl = import.meta.env.VITE_CONVEX_URL;
+if (!convexUrl) {
+  console.error("[AIE] VITE_CONVEX_URL is not set. Check your environment variables.");
+}
+const convex = new ConvexReactClient(convexUrl as string);
 
 function RouteSyncer() {
   const location = useLocation();
@@ -96,6 +100,22 @@ function RouteSyncer() {
   }, []);
   return null;
 }
+
+// Catch errors that happen before React mounts (white screen prevention)
+window.onerror = (msg, src, line, col, err) => {
+  const root = document.getElementById("root");
+  if (root && root.children.length === 0) {
+    root.innerHTML = `
+      <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;font-family:system-ui,sans-serif;">
+        <div style="max-width:480px;text-align:center;">
+          <h2 style="font-size:16px;font-weight:600;margin-bottom:12px;">AIE — Something went wrong</h2>
+          <p style="font-size:13px;color:#666;margin-bottom:8px;">${String(msg)}</p>
+          ${line ? `<p style="font-size:11px;color:#999;">Line ${line}:${col}</p>` : ""}
+          <p style="font-size:12px;color:#888;margin-top:16px;">Try refreshing the page. If the problem persists, check your environment variables.</p>
+        </div>
+      </div>`;
+  }
+};
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

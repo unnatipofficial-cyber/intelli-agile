@@ -2,17 +2,38 @@
 
 import { action } from "./_generated/server";
 import { v } from "convex/values";
-import Anthropic from "@anthropic-ai/sdk";
 
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
-});
+function getAnthropicClient() {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) {
+    return null;
+  }
+  // Dynamic import so the module doesn't crash when the key is absent
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const Anthropic = require("@anthropic-ai/sdk").default;
+  return new Anthropic({ apiKey });
+}
 
 export const generateInsights = action({
   args: {
     projectData: v.string(),
   },
   handler: async (ctx, args) => {
+    const anthropic = getAnthropicClient();
+    if (!anthropic) {
+      return JSON.stringify([
+        {
+          severity: "medium",
+          title: "AI Insights Unavailable",
+          description:
+            "ANTHROPIC_API_KEY is not configured. Add it in your Convex dashboard under Settings → Environment Variables.",
+          recommendedAction:
+            "Add ANTHROPIC_API_KEY to your Convex environment variables to enable AI-powered insights.",
+          category: "sprint",
+        },
+      ]);
+    }
+
     const response = await anthropic.messages.create({
       model: "claude-sonnet-4-20250514",
       max_tokens: 2048,
@@ -36,10 +57,14 @@ ${args.projectData}`,
       ],
     });
 
-    const text = response.content[0].type === "text" ? response.content[0].text : "[]";
+    const text =
+      response.content[0].type === "text" ? response.content[0].text : "[]";
 
     try {
-      const cleaned = text.replace(/```json?\n?/g, "").replace(/```\n?/g, "").trim();
+      const cleaned = text
+        .replace(/```json?\n?/g, "")
+        .replace(/```\n?/g, "")
+        .trim();
       const insights = JSON.parse(cleaned);
       return JSON.stringify(insights);
     } catch {
@@ -48,7 +73,8 @@ ${args.projectData}`,
           severity: "medium",
           title: "AIE Analysis",
           description: text.slice(0, 300),
-          recommendedAction: "Review the analysis above and discuss with your team.",
+          recommendedAction:
+            "Review the analysis above and discuss with your team.",
           category: "sprint",
         },
       ]);
@@ -62,6 +88,11 @@ export const generateSprintSummary = action({
     taskSummary: v.string(),
   },
   handler: async (ctx, args) => {
+    const anthropic = getAnthropicClient();
+    if (!anthropic) {
+      return "AI summary unavailable — ANTHROPIC_API_KEY is not configured.";
+    }
+
     const response = await anthropic.messages.create({
       model: "claude-sonnet-4-20250514",
       max_tokens: 1024,
@@ -73,7 +104,9 @@ export const generateSprintSummary = action({
       ],
     });
 
-    return response.content[0].type === "text" ? response.content[0].text : "Summary unavailable.";
+    return response.content[0].type === "text"
+      ? response.content[0].text
+      : "Summary unavailable.";
   },
 });
 
@@ -88,6 +121,11 @@ export const chat = action({
     projectContext: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    const anthropic = getAnthropicClient();
+    if (!anthropic) {
+      return "I am unable to respond right now. ANTHROPIC_API_KEY is not configured.\n\nTo enable the AI assistant:\n1. Get an API key from https://console.anthropic.com/settings/keys\n2. Add ANTHROPIC_API_KEY in your Convex dashboard under Settings → Environment Variables\n3. The AI chat will start working immediately after the key is set.";
+    }
+
     const systemPrompt = `You are AIE Assistant, an expert AI assistant built into the AIE (Agile Intelligence Engine) platform. You help software teams with Agile project management.
 
 You can help with:
@@ -115,6 +153,8 @@ ${args.projectContext ? `\nCurrent project context:\n${args.projectContext}` : "
       messages,
     });
 
-    return response.content[0].type === "text" ? response.content[0].text : "I apologize, but I encountered an issue processing your request.";
+    return response.content[0].type === "text"
+      ? response.content[0].text
+      : "I apologize, but I encountered an issue processing your request.";
   },
 });
