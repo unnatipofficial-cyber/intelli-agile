@@ -3,13 +3,40 @@
 import { action } from "./_generated/server";
 import { v } from "convex/values";
 
-function getGeminiClient() {
+async function callGemini(prompt: string, systemPrompt?: string): Promise<string> {
   const apiKey = process.env.GOOGLE_AI_API_KEY;
   if (!apiKey) {
-    return null;
+    throw new Error("NO_API_KEY");
   }
-  const { GoogleGenerativeAI } = require("@google/generative-ai");
-  return new GoogleGenerativeAI(apiKey);
+
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+
+  const parts: Array<{ text: string }> = [];
+  if (systemPrompt) {
+    parts.push({ text: systemPrompt + "\n\n" + prompt });
+  } else {
+    parts.push({ text: prompt });
+  }
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      contents: [{ parts }],
+      generationConfig: {
+        maxOutputTokens: 2048,
+        temperature: 0.7,
+      },
+    }),
+  });
+
+  if (!response.ok) {
+    const err = await response.text();
+    throw new Error(`Gemini API error: ${response.status} - ${err}`);
+  }
+
+  const data = await response.json();
+  return data.candidates?.[0]?.content?.parts?.[0]?.text ?? "No response generated.";
 }
 
 export const generateInsights = action({
@@ -17,25 +44,9 @@ export const generateInsights = action({
     projectData: v.string(),
   },
   handler: async (ctx, args) => {
-    const genAI = getGeminiClient();
-    if (!genAI) {
-      return JSON.stringify([
-        {
-          severity: "medium",
-          title: "AI Insights Unavailable",
-          description:
-            "GOOGLE_AI_API_KEY is not configured. Add it in your Convex dashboard under Settings → Environment Variables.",
-          recommendedAction:
-            "Add GOOGLE_AI_API_KEY to your Convex environment variables to enable AI-powered insights.",
-          category: "sprint",
-        },
-      ]);
-    }
-
-    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
-
-    const result = await model.generateContent(
-      `You are AIE (Agile Intelligence Engine), an expert Agile project analyst. Analyze the following project data and provide 3-6 actionable insights.
+    try {
+      const text = await callGemini(
+        `Analyze the following project data and provide 3-6 actionable insights.
 
 For each insight, respond with a JSON array of objects, each with:
 - "severity": "critical" | "high" | "medium" | "low"
@@ -47,26 +58,31 @@ For each insight, respond with a JSON array of objects, each with:
 Respond ONLY with valid JSON array. No markdown, no explanation text.
 
 Project Data:
-${args.projectData}`
-    );
+${args.projectData}`,
+        "You are AIE (Agile Intelligence Engine), an expert Agile project analyst."
+      );
 
-    const text = result.response.text();
-
-    try {
-      const cleaned = text
-        .replace(/```json?\n?/g, "")
-        .replace(/```\n?/g, "")
-        .trim();
+      const cleaned = text.replace(/```json?\n?/g, "").replace(/```\n?/g, "").trim();
       const insights = JSON.parse(cleaned);
       return JSON.stringify(insights);
-    } catch {
+    } catch (err: any) {
+      if (err.message === "NO_API_KEY") {
+        return JSON.stringify([
+          {
+            severity: "medium",
+            title: "AI Insights Unavailable",
+            description: "GOOGLE_AI_API_KEY is not configured.",
+            recommendedAction: "Add GOOGLE_AI_API_KEY in Convex Settings → Environment Variables.",
+            category: "sprint",
+          },
+        ]);
+      }
       return JSON.stringify([
         {
-          severity: "medium",
-          title: "AIE Analysis",
-          description: text.slice(0, 300),
-          recommendedAction:
-            "Review the analysis above and discuss with your team.",
+          severity: "low",
+          title: "AI Analysis Error",
+          description: err.message?.slice(0, 200) || "Unknown error occurred.",
+          recommendedAction: "Check that the API key is valid and try again.",
           category: "sprint",
         },
       ]);
@@ -80,18 +96,14 @@ export const generateSprintSummary = action({
     taskSummary: v.string(),
   },
   handler: async (ctx, args) => {
-    const genAI = getGeminiClient();
-    if (!genAI) {
-      return "AI summary unavailable — GOOGLE_AI_API_KEY is not configured.";
+    try {
+      return await callGemini(
+        `Write a concise sprint summary (2-4 sentences) for "${args.sprintName}" based on this data:\n\n${args.taskSummary}\n\nFocus on: progress, risks, and what to watch next. Be direct and professional.`,
+        "You are AIE, an expert Agile analyst."
+      );
+    } catch (err: any) {
+      return `Summary unavailable: ${err.message}`;
     }
-
-    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
-
-    const result = await model.generateContent(
-      `You are AIE, an expert Agile analyst. Write a concise sprint summary (2-4 sentences) for "${args.sprintName}" based on this data:\n\n${args.taskSummary}\n\nFocus on: progress, risks, and what to watch next. Be direct and professional.`
-    );
-
-    return result.response.text();
   },
 });
 
@@ -106,14 +118,8 @@ export const chat = action({
     projectContext: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const genAI = getGeminiClient();
-    if (!genAI) {
-      return "I am unable to respond right now. GOOGLE_AI_API_KEY is not configured.\n\nTo enable the AI assistant:\n1. Get an API key from https://aistudio.google.com/apikey\n2. Add GOOGLE_AI_API_KEY in your Convex dashboard under Settings → Environment Variables\n3. The AI chat will start working immediately after the key is set.";
-    }
-
-    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
-
-    const systemPrompt = `You are AIE Assistant, an expert AI assistant built into the AIE (Agile Intelligence Engine) platform. You help software teams with Agile project management.
+    try {
+      const systemPrompt = `You are AIE Assistant, an expert AI assistant built into the AIE (Agile Intelligence Engine) platform. You help software teams with Agile project management.
 
 You can help with:
 - Sprint planning and management advice
@@ -128,22 +134,17 @@ You can help with:
 Be concise, professional, and actionable. Use bullet points for lists. When referring to data, be specific.
 ${args.projectContext ? `\nCurrent project context:\n${args.projectContext}` : ""}`;
 
-    // Build conversation history
-    const history = args.messages.slice(0, -1).map((m) => ({
-      role: m.role === "assistant" ? "model" : "user",
-      parts: [{ text: m.content }],
-    }));
+      // Combine conversation history into one prompt for the simple HTTP API
+      const conversationText = args.messages
+        .map((m) => `${m.role === "user" ? "User" : "Assistant"}: ${m.content}`)
+        .join("\n\n");
 
-    const chat = model.startChat({
-      history,
-      generationConfig: {
-        maxOutputTokens: 2048,
-      },
-    });
-
-    const lastMessage = args.messages[args.messages.length - 1];
-    const result = await chat.sendMessage(lastMessage.content);
-
-    return result.response.text();
+      return await callGemini(conversationText, systemPrompt);
+    } catch (err: any) {
+      if (err.message === "NO_API_KEY") {
+        return "GOOGLE_AI_API_KEY is not configured. Add it in Convex Settings → Environment Variables.";
+      }
+      return `Error: ${err.message?.slice(0, 300) || "Unknown error"}`;
+    }
   },
 });
