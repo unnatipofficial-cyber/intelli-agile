@@ -3,13 +3,13 @@
 import { action } from "./_generated/server";
 import { v } from "convex/values";
 
+const MODELS = ["gemini-flash-lite-latest", "gemini-flash-latest", "gemini-3-flash-preview"];
+
 async function callGemini(prompt: string, systemPrompt?: string): Promise<string> {
   const apiKey = process.env.GOOGLE_AI_API_KEY;
   if (!apiKey) {
     throw new Error("NO_API_KEY");
   }
-
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${apiKey}`;
 
   const parts: Array<{ text: string }> = [];
   if (systemPrompt) {
@@ -18,25 +18,45 @@ async function callGemini(prompt: string, systemPrompt?: string): Promise<string
     parts.push({ text: prompt });
   }
 
-  const response = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      contents: [{ parts }],
-      generationConfig: {
-        maxOutputTokens: 8192,
-        temperature: 0.7,
-      },
-    }),
-  });
+  // Try each model with retries
+  for (const model of MODELS) {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+        const response = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{ parts }],
+            generationConfig: {
+              maxOutputTokens: 4096,
+              temperature: 0.7,
+            },
+          }),
+        });
 
-  if (!response.ok) {
-    const err = await response.text();
-    throw new Error(`Gemini API error: ${response.status} - ${err}`);
+        if (response.status === 503 || response.status === 429) {
+          // Rate limited or overloaded — wait and retry
+          await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
+          continue;
+        }
+
+        if (!response.ok) {
+          const err = await response.text();
+          throw new Error(`Gemini API error: ${response.status} - ${err}`);
+        }
+
+        const data = await response.json();
+        const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (text) return text;
+      } catch (err: any) {
+        if (attempt === 1) break; // Move to next model
+        await new Promise((r) => setTimeout(r, 1000));
+      }
+    }
   }
 
-  const data = await response.json();
-  return data.candidates?.[0]?.content?.parts?.[0]?.text ?? "No response generated.";
+  throw new Error("All Gemini models are temporarily unavailable. Please try again in a moment.");
 }
 
 export const generateInsights = action({
