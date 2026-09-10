@@ -118,10 +118,10 @@ export default function ActivityFeed({ projectId, limit = 30, showProjectName = 
               </p>
               <div className="flex items-center gap-2 mt-0.5">
                 <span className="text-[11px] text-muted-foreground/60">{timeAgo(log.createdAt)}</span>
-                {showProjectName && log.projectName && (
+                {showProjectName && (log as any).projectName && (
                   <>
                     <span className="text-muted-foreground/30">·</span>
-                    <span className="text-[11px] text-muted-foreground/60">{log.projectName}</span>
+                    <span className="text-[11px] text-muted-foreground/60">{(log as any).projectName}</span>
                   </>
                 )}
               </div>

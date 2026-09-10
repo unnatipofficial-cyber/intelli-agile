@@ -7,6 +7,7 @@ import { FloatingDock, dockNavItems } from "@/components/FloatingDock";
 import { AIELogo } from "@/components/AIELogo";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import AIChat from "@/components/AIChat";
+import CommandPalette from "@/components/CommandPalette";
 import {
   Moon,
   Sun,
@@ -125,6 +126,9 @@ export default function AppLayout({ children }: { children: ReactNode }) {
       <main className="p-4 lg:p-6 pb-24 md:pb-8">
         {children}
       </main>
+
+      {/* Command Palette (Ctrl+K) */}
+      <CommandPalette />
 
       {/* AI Chat assistant */}
       <ErrorBoundary>

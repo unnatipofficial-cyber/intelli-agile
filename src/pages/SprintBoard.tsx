@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import BurndownChart from "@/components/BurndownChart";
 import {
   Columns3,
   Clock,
@@ -222,6 +223,19 @@ export default function SprintBoard() {
             </button>
           ))}
         </div>
+      )}
+
+      {/* Burndown Chart */}
+      {activeSprint && (
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+          className="p-4 rounded-xl border border-border/50 bg-card/50"
+        >
+          <h3 className="text-sm font-semibold mb-3">Sprint Burndown</h3>
+          <BurndownChart sprintId={activeSprint._id} />
+        </motion.div>
       )}
 
       {/* Kanban Board */}

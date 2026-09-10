@@ -10,6 +10,8 @@ import { insightSeverityStyles } from "@/lib/badge-colors";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import ActivityFeed from "@/components/ActivityFeed";
+import SprintForecast from "@/components/SprintForecast";
 import {
   FolderKanban,
   Zap,
@@ -591,6 +593,14 @@ export default function Dashboard() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.35 }}
             >
+              <SprintForecast sprints={sprints || []} tasks={allTasks || []} />
+            </motion.div>
+
+            <motion.div
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.4 }}
+            >
               <div className="glass-card p-5">
                 <div className="mb-4">
                   <h3 className="text-sm font-bold">Task Distribution</h3>
@@ -692,6 +702,23 @@ export default function Dashboard() {
           </motion.div>
         </div>
       </div>
+
+      {/* Activity Feed */}
+      <motion.div
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.3 }}
+        className="mt-6"
+      >
+        <Card className="border-border/50">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-bold tracking-tight">Recent Activity</CardTitle>
+          </CardHeader>
+          <CardContent className="p-0 max-h-[300px] overflow-y-auto">
+            <ActivityFeed limit={15} />
+          </CardContent>
+        </Card>
+      </motion.div>
     </div>
   );
 }

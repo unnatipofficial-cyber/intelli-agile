@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useQuery } from "convex/react";
 import { api } from "../convex/_generated/api";
 import { motion, AnimatePresence } from "framer-motion";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router";
 import {
   Search,
   LayoutDashboard,
