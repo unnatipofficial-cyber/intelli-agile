@@ -9,7 +9,7 @@ async function callGemini(prompt: string, systemPrompt?: string): Promise<string
     throw new Error("NO_API_KEY");
   }
 
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${apiKey}`;
 
   const parts: Array<{ text: string }> = [];
   if (systemPrompt) {
@@ -24,7 +24,7 @@ async function callGemini(prompt: string, systemPrompt?: string): Promise<string
     body: JSON.stringify({
       contents: [{ parts }],
       generationConfig: {
-        maxOutputTokens: 2048,
+        maxOutputTokens: 8192,
         temperature: 0.7,
       },
     }),
