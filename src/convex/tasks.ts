@@ -162,3 +162,137 @@ export const reorder = mutation({
     return args.taskId;
   },
 });
+
+export const bulkUpdate = mutation({
+  args: {
+    taskIds: v.array(v.id("tasks")),
+    status: v.optional(v.union(v.literal("todo"), v.literal("in-progress"), v.literal("review"), v.literal("done"))),
+    priority: v.optional(v.union(v.literal("low"), v.literal("medium"), v.literal("high"), v.literal("critical"))),
+    assigneeId: v.optional(v.id("users")),
+    sprintId: v.optional(v.id("sprints")),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
+    const userId = identity.subject as any;
+    const now = Date.now();
+    const updates: Record<string, any> = { updatedAt: now };
+    if (args.status !== undefined) updates.status = args.status;
+    if (args.priority !== undefined) updates.priority = args.priority;
+    if (args.assigneeId !== undefined) updates.assigneeId = args.assigneeId;
+    if (args.sprintId !== undefined) updates.sprintId = args.sprintId;
+
+    for (const taskId of args.taskIds) {
+      await ctx.db.patch(taskId, updates);
+    }
+
+    // Log activity for the first task as representative
+    if (args.taskIds.length > 0) {
+      const task = await ctx.db.get(args.taskIds[0]);
+      if (task) {
+        const actionParts = [];
+        if (args.status) actionParts.push(`status to ${args.status}`);
+        if (args.priority) actionParts.push(`priority to ${args.priority}`);
+        if (args.sprintId) actionParts.push(`to sprint`);
+        await ctx.db.insert("activityLogs", {
+          userId,
+          projectId: task.projectId,
+          action: `bulk updated ${actionParts.join(", ") || "tasks"}`,
+          entityType: "task",
+          entityName: `${args.taskIds.length} tasks`,
+          createdAt: now,
+        });
+      }
+    }
+
+    return args.taskIds.length;
+  },
+});
+
+export const bulkDelete = mutation({
+  args: { taskIds: v.array(v.id("tasks")) },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
+    for (const taskId of args.taskIds) {
+      await ctx.db.delete(taskId);
+    }
+    return args.taskIds.length;
+  },
+});
+
+export const getBurndownData = query({
+  args: { sprintId: v.id("sprints") },
+  handler: async (ctx, args) => {
+    const sprint = await ctx.db.get(args.sprintId);
+    if (!sprint) return null;
+
+    const tasks = await ctx.db
+      .query("tasks")
+      .withIndex("by_sprint", (q) => q.eq("sprintId", args.sprintId))
+      .collect();
+
+    const totalPoints = tasks.reduce((sum, t) => sum + (t.storyPoints || 0), 0);
+    const now = Date.now();
+    const sprintDuration = sprint.endDate - sprint.startDate;
+    const elapsed = Math.max(0, now - sprint.startDate);
+    const progress = Math.min(1, elapsed / sprintDuration);
+
+    // Generate ideal burndown points
+    const days = Math.ceil(sprintDuration / (1000 * 60 * 60 * 24));
+    const idealPoints: { day: number; points: number }[] = [];
+    for (let i = 0; i <= days; i++) {
+      idealPoints.push({
+        day: i,
+        points: totalPoints - (totalPoints * i) / days,
+      });
+    }
+
+    // Calculate actual remaining points
+    const completedPoints = tasks
+      .filter((t) => t.status === "done")
+      .reduce((sum, t) => sum + (t.storyPoints || 0), 0);
+    const actualRemaining = totalPoints - completedPoints;
+
+    // Estimate actual burndown based on completion pattern
+    const actualPoints: { day: number; points: number }[] = [];
+    const completedTasks = tasks
+      .filter((t) => t.status === "done")
+      .sort((a, b) => (a.updatedAt || 0) - (b.updatedAt || 0));
+
+    let cumulativeCompleted = 0;
+    let taskIndex = 0;
+    const sprintStart = sprint.startDate;
+
+    for (let i = 0; i <= days; i++) {
+      const dayTimestamp = sprintStart + i * 24 * 60 * 60 * 1000;
+      while (
+        taskIndex < completedTasks.length &&
+        (completedTasks[taskIndex].updatedAt || 0) <= dayTimestamp
+      ) {
+        cumulativeCompleted += completedTasks[taskIndex].storyPoints || 0;
+        taskIndex++;
+      }
+      actualPoints.push({
+        day: i,
+        points: totalPoints - cumulativeCompleted,
+      });
+    }
+
+    // If we're partway through, only show up to current day
+    const currentDay = Math.min(days, Math.floor(elapsed / (24 * 60 * 60 * 1000)));
+
+    return {
+      totalPoints,
+      completedPoints,
+      remainingPoints: actualRemaining,
+      idealPoints,
+      actualPoints,
+      currentDay,
+      totalDays: days,
+      progress,
+      taskCount: tasks.length,
+      completedTaskCount: tasks.filter((t) => t.status === "done").length,
+    };
+  },
+});

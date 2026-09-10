@@ -157,9 +157,44 @@ const schema = defineSchema(
       action: v.string(),
       entityType: v.string(),
       entityName: v.optional(v.string()),
+      details: v.optional(v.string()),
       createdAt: v.number(),
     }).index("by_project", ["projectId"])
-      .index("by_user", ["userId"]),
+      .index("by_user", ["userId"])
+      .index("by_project_time", ["projectId", "createdAt"]),
+
+    comments: defineTable({
+      taskId: v.id("tasks"),
+      userId: v.id("users"),
+      content: v.string(),
+      mentions: v.optional(v.array(v.id("users"))),
+      parentId: v.optional(v.id("comments")),
+      createdAt: v.number(),
+      updatedAt: v.number(),
+    }).index("by_task", ["taskId"])
+      .index("by_parent", ["parentId"]),
+
+    timeEntries: defineTable({
+      taskId: v.id("tasks"),
+      userId: v.id("users"),
+      projectId: v.id("projects"),
+      description: v.optional(v.string()),
+      minutes: v.number(),
+      date: v.number(),
+      createdAt: v.number(),
+    }).index("by_task", ["taskId"])
+      .index("by_user", ["userId"])
+      .index("by_project", ["projectId"]),
+
+    retrospectives: defineTable({
+      sprintId: v.id("sprints"),
+      projectId: v.id("projects"),
+      wentWell: v.array(v.string()),
+      toImprove: v.array(v.string()),
+      actionItems: v.array(v.string()),
+      createdAt: v.number(),
+    }).index("by_sprint", ["sprintId"])
+      .index("by_project", ["projectId"]),
   },
   {
     schemaValidation: false,
