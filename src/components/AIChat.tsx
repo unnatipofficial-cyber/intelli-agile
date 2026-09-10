@@ -92,7 +92,7 @@ export default function AIChat() {
         ...updatedMessages,
         {
           role: "assistant",
-          content: "I am unable to respond right now. Please make sure the ANTHROPIC_API_KEY is configured in your Convex dashboard under Settings → Environment Variables.",
+          content: "I am unable to respond right now. Please make sure the GOOGLE_AI_API_KEY is configured in your Convex dashboard under Settings → Environment Variables.",
         },
       ]);
     }
