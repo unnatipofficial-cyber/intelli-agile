@@ -73,10 +73,10 @@ export default function Landing() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="ghost" size="sm" onClick={() => navigate("/auth")}>
+            <Button variant="ghost" size="sm" onClick={() => navigate("/auth/ui")}>
               Sign In
             </Button>
-            <Button size="sm" onClick={() => navigate("/auth")} className="gap-1.5">
+            <Button size="sm" onClick={() => navigate("/auth/ui")} className="gap-1.5">
               Get Started <ArrowRight className="w-3.5 h-3.5" />
             </Button>
           </div>
@@ -119,10 +119,10 @@ export default function Landing() {
             </p>
 
             <div className="flex items-center justify-center gap-3">
-              <Button size="lg" onClick={() => navigate("/auth")} className="gap-2 px-6">
+              <Button size="lg" onClick={() => navigate("/auth/ui")} className="gap-2 px-6">
                 Open Dashboard <ArrowRight className="w-4 h-4" />
               </Button>
-              <Button size="lg" variant="outline" onClick={() => navigate("/auth")} className="gap-2 px-6">
+              <Button size="lg" variant="outline" onClick={() => navigate("/auth/ui")} className="gap-2 px-6">
                 Sign In
               </Button>
             </div>
@@ -207,7 +207,7 @@ export default function Landing() {
               <p className="text-sm text-muted-foreground max-w-md mx-auto mb-6">
                 AIE helps your team ship faster with clear sprint visibility, intelligent risk tracking, and AI-powered recommendations.
               </p>
-              <Button size="lg" onClick={() => navigate("/auth")} className="gap-2 px-8">
+              <Button size="lg" onClick={() => navigate("/auth/ui")} className="gap-2 px-8">
                 Open AIE <ArrowRight className="w-4 h-4" />
               </Button>
             </div>

@@ -45,8 +45,19 @@
   --color-aie-blue-light: var(--aie-accent-light);
   --color-aie-blue-dark: var(--aie-accent-dark);
   --color-aie-glow: var(--aie-glow-color);
+
+  /* Auth UI extras (still powered by the shared theme variables) */
+  --destructive-foreground: var(--destructive-foreground);
 }
 
+:root {
+  --radius: 1rem;
+  --destructive-foreground: oklch(0.985 0 0);
+}
+
+.dark {
+  --destructive-foreground: oklch(0.985 0 0);
+}
 /* ════════════════════════════════════════════════════════════════
    GRAPHITE — monochromatic cool-gray
    ════════════════════════════════════════════════════════════════ */
