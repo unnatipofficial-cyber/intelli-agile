@@ -3,6 +3,7 @@ import {
   IconLayoutDashboard,
   IconFolder,
   IconClipboardList,
+  IconChecklist,
   IconLayoutColumns,
   IconUsers,
   IconAlertTriangle,
@@ -24,6 +25,7 @@ import { cn } from "@/lib/utils";
 export const dockNavItems = [
   { title: "Dashboard", path: "/dashboard", icon: "dashboard" },
   { title: "Projects", path: "/dashboard/projects", icon: "projects" },
+  { title: "Tasks", path: "/dashboard/tasks", icon: "tasks" },
   { title: "Backlog", path: "/dashboard/backlog", icon: "backlog" },
   { title: "Sprint Board", path: "/dashboard/sprint-board", icon: "sprint-board" },
   { title: "Team", path: "/dashboard/team", icon: "team" },
@@ -36,6 +38,7 @@ export const dockNavItems = [
 const iconMap: Record<string, React.FC<{ className?: string }>> = {
   dashboard: IconLayoutDashboard,
   projects: IconFolder,
+  tasks: IconChecklist,
   backlog: IconClipboardList,
   "sprint-board": IconLayoutColumns,
   team: IconUsers,

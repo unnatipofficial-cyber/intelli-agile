@@ -20,6 +20,47 @@ export const list = query({
   },
 });
 
+/**
+ * Workspace-wide task feed used by the Tasks page.
+ *
+ * Unlike `list`, this is not bound to a single project: it powers the
+ * "all my work items" experience with search, filters and the Kanban board.
+ * Each task is enriched with its assignee, project and sprint.
+ */
+export const listWorkspace = query({
+  args: {
+    projectId: v.optional(v.id("projects")),
+    assigneeId: v.optional(v.id("users")),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return [];
+
+    const projectId = args.projectId;
+    const tasks = projectId
+      ? await ctx.db
+          .query("tasks")
+          .withIndex("by_project", (q) => q.eq("projectId", projectId))
+          .collect()
+      : await ctx.db.query("tasks").collect();
+
+    const filtered = args.assigneeId
+      ? tasks.filter((task) => task.assigneeId === args.assigneeId)
+      : tasks;
+
+    return await Promise.all(
+      filtered.map(async (task) => {
+        const assignee = task.assigneeId
+          ? await safeGet(ctx, task.assigneeId)
+          : null;
+        const project = await safeGet(ctx, task.projectId);
+        const sprint = task.sprintId ? await safeGet(ctx, task.sprintId) : null;
+        return { ...task, assignee, project, sprint };
+      }),
+    );
+  },
+});
+
 export const listBySprint = query({
   args: { sprintId: v.id("sprints") },
   handler: async (ctx, args) => {
