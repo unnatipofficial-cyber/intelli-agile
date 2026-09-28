@@ -5,9 +5,18 @@ import { useState, useEffect } from "react";
 import { Slot } from "@radix-ui/react-slot";
 import * as LabelPrimitive from "@radix-ui/react-label";
 import { cva, type VariantProps } from "class-variance-authority";
-import { Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff, ArrowRight, Loader2, UserX } from "lucide-react";
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
+import { useNavigate, useSearchParams } from "react-router";
+import { useQuery } from "convex/react";
+import { useAuth } from "@/hooks/use-auth";
+import { api } from "@/convex/_generated/api";
+import {
+  InputOTP,
+  InputOTPGroup,
+  InputOTPSlot,
+} from "@/components/ui/input-otp";
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -209,95 +218,14 @@ const PasswordInput = React.forwardRef<
 });
 PasswordInput.displayName = "PasswordInput";
 
-function SignInForm() {
-  const handleSignIn = (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    console.log("UI: Sign In form submitted");
-  };
-  return (
-    <form onSubmit={handleSignIn} autoComplete="on" className="flex flex-col gap-8">
-      <div className="flex flex-col items-center gap-2 text-center">
-        <h1 className="text-2xl font-bold">Sign in to your account</h1>
-        <p className="text-balance text-sm text-muted-foreground">
-          Enter your email below to sign in
-        </p>
-      </div>
-      <div className="grid gap-4">
-        <div className="grid gap-2">
-          <Label htmlFor="email">Email</Label>
-          <Input
-            id="email"
-            name="email"
-            type="email"
-            placeholder="m@example.com"
-            required
-            autoComplete="email"
-          />
-        </div>
-        <PasswordInput
-          name="password"
-          label="Password"
-          required
-          autoComplete="current-password"
-          placeholder="Password"
-        />
-        <Button type="submit" variant="outline" className="mt-2">
-          Sign In
-        </Button>
-      </div>
-    </form>
-  );
-}
-
-function SignUpForm() {
-  const handleSignUp = (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    console.log("UI: Sign Up form submitted");
-  };
-  return (
-    <form onSubmit={handleSignUp} autoComplete="on" className="flex flex-col gap-8">
-      <div className="flex flex-col items-center gap-2 text-center">
-        <h1 className="text-2xl font-bold">Create an account</h1>
-        <p className="text-balance text-sm text-muted-foreground">
-          Enter your details below to sign up
-        </p>
-      </div>
-      <div className="grid gap-4">
-        <div className="grid gap-1">
-          <Label htmlFor="name">Full Name</Label>
-          <Input
-            id="name"
-            name="name"
-            type="text"
-            placeholder="John Doe"
-            required
-            autoComplete="name"
-          />
-        </div>
-        <div className="grid gap-2">
-          <Label htmlFor="email">Email</Label>
-          <Input
-            id="email"
-            name="email"
-            type="email"
-            placeholder="m@example.com"
-            required
-            autoComplete="email"
-          />
-        </div>
-        <PasswordInput
-          name="password"
-          label="Password"
-          required
-          autoComplete="new-password"
-          placeholder="Password"
-        />
-        <Button type="submit" variant="outline" className="mt-2">
-          Sign Up
-        </Button>
-      </div>
-    </form>
-  );
+function resolveRedirectAfterAuth(
+  returnTo: string | null,
+  fallback = "/dashboard",
+) {
+  if (returnTo && returnTo.startsWith("/") && !returnTo.startsWith("//")) {
+    return returnTo;
+  }
+  return fallback;
 }
 
 function AuthFormContainer({
@@ -307,36 +235,278 @@ function AuthFormContainer({
   isSignIn: boolean;
   onToggle: () => void;
 }) {
+  const { signIn, isAuthenticated, isLoading: authLoading } = useAuth();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const redirect = resolveRedirectAfterAuth(searchParams.get("returnTo"));
+  const providerConfig = useQuery(api.authProviders.enabled);
+  const googleEnabled = providerConfig?.google === true;
+
+  const [step, setStep] = useState<"email" | "code">("email");
+  const [email, setEmail] = useState("");
+  const [name, setName] = useState("");
+  const [code, setCode] = useState("");
+  const [isPending, setIsPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Already signed in? Send them straight to the app.
+  useEffect(() => {
+    if (!authLoading && isAuthenticated) {
+      navigate(redirect, { replace: true });
+    }
+  }, [authLoading, isAuthenticated, navigate, redirect]);
+
+  // Reset the flow whenever the user switches between sign in / sign up.
+  useEffect(() => {
+    setStep("email");
+    setCode("");
+    setError(null);
+  }, [isSignIn]);
+
+  const handleEmailSubmit = async (
+    event: React.FormEvent<HTMLFormElement>,
+  ) => {
+    event.preventDefault();
+    setIsPending(true);
+    setError(null);
+    try {
+      await signIn("email-otp", {
+        email,
+        ...(name.trim() && !isSignIn ? { name: name.trim() } : {}),
+        redirectTo: redirect,
+      });
+      setStep("code");
+    } catch (err) {
+      console.error("Email sign-in error:", err);
+      setError(
+        err instanceof Error && err.message
+          ? err.message
+          : "We couldn't send a code to that address. Check it and try again.",
+      );
+    } finally {
+      setIsPending(false);
+    }
+  };
+
+  const handleCodeSubmit = async (
+    event: React.FormEvent<HTMLFormElement>,
+  ) => {
+    event.preventDefault();
+    setIsPending(true);
+    setError(null);
+    try {
+      await signIn("email-otp", { email, code, redirectTo: redirect });
+      navigate(redirect, { replace: true });
+    } catch (err) {
+      console.error("Code verification error:", err);
+      setError("That code didn't match. Check your inbox and try again.");
+      setCode("");
+    } finally {
+      setIsPending(false);
+    }
+  };
+
+  const handleGuest = async () => {
+    setIsPending(true);
+    setError(null);
+    try {
+      await signIn("anonymous");
+      navigate(redirect, { replace: true });
+    } catch (err) {
+      console.error("Guest sign-in error:", err);
+      setError("We couldn't start a guest session. Please try again.");
+    } finally {
+      setIsPending(false);
+    }
+  };
+
+  const handleGoogle = async () => {
+    setIsPending(true);
+    setError(null);
+    try {
+      const { redirect: oauthUrl } = await signIn("google", {
+        redirectTo: redirect,
+      });
+      if (oauthUrl) {
+        window.location.href = oauthUrl.toString();
+        return;
+      }
+      setError("Google sign-in couldn't start. Please try again.");
+    } catch (err) {
+      console.error("Google sign-in error:", err);
+      setError(
+        "Google sign-in isn't enabled yet. Use email or guest sign-in instead.",
+      );
+    } finally {
+      setIsPending(false);
+    }
+  };
+
+  const heading =
+    step === "code"
+      ? "Check your email"
+      : isSignIn
+        ? "Sign in to your account"
+        : "Create your account";
+  const subheading =
+    step === "code"
+      ? `We sent a 6-digit code to ${email}`
+      : isSignIn
+        ? "Enter your email and we'll send you a sign-in code"
+        : "Enter your details and we'll send you a verification code";
+
   return (
-    <div className="mx-auto grid w-[350px] gap-2">
-      {isSignIn ? <SignInForm /> : <SignUpForm />}
-      <div className="text-center text-sm">
-        {isSignIn ? "Don't have an account?" : "Already have an account?"}{" "}
-        <Button
-          variant="link"
-          className="pl-1 text-foreground"
-          onClick={onToggle}
-        >
-          {isSignIn ? "Sign up" : "Sign in"}
-        </Button>
+    <div className="mx-auto grid w-[350px] gap-6">
+      <div className="flex flex-col items-center gap-2 text-center">
+        <h1 className="text-2xl font-bold tracking-tight">{heading}</h1>
+        <p className="text-balance text-sm text-muted-foreground">
+          {subheading}
+        </p>
       </div>
+
+      {step === "email" ? (
+        <form
+          onSubmit={handleEmailSubmit}
+          autoComplete="on"
+          className="grid gap-4"
+        >
+          {!isSignIn && (
+            <div className="grid gap-2">
+              <Label htmlFor="name">Full name</Label>
+              <Input
+                id="name"
+                name="name"
+                type="text"
+                placeholder="Ada Lovelace"
+                autoComplete="name"
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+                disabled={isPending}
+              />
+            </div>
+          )}
+          <div className="grid gap-2">
+            <Label htmlFor="email">Email</Label>
+            <Input
+              id="email"
+              name="email"
+              type="email"
+              placeholder="you@example.com"
+              required
+              autoComplete="email"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              disabled={isPending}
+            />
+          </div>
+
+          {error && (
+            <p className="text-sm text-destructive" role="alert">
+              {error}
+            </p>
+          )}
+
+          <Button type="submit" className="mt-1" disabled={isPending}>
+            {isPending ? (
+              <Loader2 className="mr-2 size-4 animate-spin" />
+            ) : (
+              <ArrowRight className="mr-2 size-4" />
+            )}
+            {isSignIn ? "Send sign-in code" : "Create account"}
+          </Button>
+
+          <div className="text-center text-sm">
+            {isSignIn ? "Don't have an account?" : "Already have an account?"}{" "}
+            <Button
+              variant="link"
+              type="button"
+              className="h-auto p-0 pl-1 text-foreground"
+              onClick={onToggle}
+            >
+              {isSignIn ? "Sign up" : "Sign in"}
+            </Button>
+          </div>
+        </form>
+      ) : (
+        <form onSubmit={handleCodeSubmit} className="grid gap-4">
+          <div className="flex justify-center">
+            <InputOTP
+              value={code}
+              onChange={setCode}
+              maxLength={6}
+              disabled={isPending}
+              autoFocus
+            >
+              <InputOTPGroup>
+                {Array.from({ length: 6 }).map((_, index) => (
+                  <InputOTPSlot key={index} index={index} />
+                ))}
+              </InputOTPGroup>
+            </InputOTP>
+          </div>
+
+          {error && (
+            <p className="text-center text-sm text-destructive" role="alert">
+              {error}
+            </p>
+          )}
+
+          <Button type="submit" disabled={isPending || code.length !== 6}>
+            {isPending && <Loader2 className="mr-2 size-4 animate-spin" />}
+            Verify code
+          </Button>
+
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => {
+              setStep("email");
+              setCode("");
+              setError(null);
+            }}
+            disabled={isPending}
+          >
+            Use a different email
+          </Button>
+        </form>
+      )}
+
       <div className="relative text-center text-sm after:absolute after:inset-0 after:top-1/2 after:z-0 after:flex after:items-center after:border-t after:border-border">
         <span className="relative z-10 bg-background px-2 text-muted-foreground">
           Or continue with
         </span>
       </div>
-      <Button
-        variant="outline"
-        type="button"
-        onClick={() => console.log("UI: Google button clicked")}
-      >
-        <img
-          src="https://upload.wikimedia.org/wikipedia/commons/thumb/5/53/Google_%22G%22_Logo.svg/640px-Google_%22G%22_Logo.svg.png"
-          alt="Google icon"
-          className="mr-2 h-4 w-4"
-        />
-        Continue with Google
-      </Button>
+
+      <div className="grid gap-2">
+        <Button
+          variant="outline"
+          type="button"
+          onClick={handleGoogle}
+          disabled={isPending || !googleEnabled}
+        >
+          <img
+            src="https://upload.wikimedia.org/wikipedia/commons/thumb/5/53/Google_%22G%22_Logo.svg/640px-Google_%22G%22_Logo.svg.png"
+            alt=""
+            className="mr-2 size-4"
+          />
+          Continue with Google
+        </Button>
+        {providerConfig && !providerConfig.google && (
+          <p className="text-center text-xs text-muted-foreground">
+            Google sign-in isn't configured for this deployment yet — use email
+            or guest sign-in.
+          </p>
+        )}
+        <Button
+          variant="ghost"
+          type="button"
+          onClick={handleGuest}
+          disabled={isPending}
+        >
+          <UserX className="mr-2 size-4" />
+          Continue as guest
+        </Button>
+      </div>
     </div>
   );
 }
@@ -407,7 +577,7 @@ export function AuthUI({
           display: none;
         }
       `}</style>
-      <div className="flex h-screen items-center justify-center p-6 md:h-auto md:p-0 md:py-12">
+      <div className="flex min-h-screen items-center justify-center p-6 md:p-0 md:py-12">
         <AuthFormContainer isSignIn={isSignIn} onToggle={toggleForm} />
       </div>
 
