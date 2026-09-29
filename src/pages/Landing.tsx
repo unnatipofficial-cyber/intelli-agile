@@ -52,13 +52,13 @@ const AUTH_ROUTE = "/auth/ui";
 const SUBJECT_BY_THEME: Record<AppTheme, HeroSubject> = {
   graphite: "earth",
   "modern-minimal": "blackhole",
-  darkmatter: "sun",
+  darkmatter: "solar",
 };
 
 const SUBJECT_CAPTION: Record<HeroSubject, string> = {
   earth: "Graphite · Earth and satellite",
   blackhole: "Modern Minimal · Black hole",
-  sun: "Darkmatter · Sun",
+  solar: "Darkmatter · Solar system",
 };
 
 const features = [
@@ -430,7 +430,12 @@ export default function Landing() {
               <ErrorBoundary fallback={<HeroBackdrop />}>
                 <Suspense fallback={<HeroBackdrop />}>
                   <div className="absolute inset-0">
-                    <Hero3DScene palette={palette} subject={subject} animated={!pointer.reduced} />
+                    <Hero3DScene
+                      palette={palette}
+                      subject={subject}
+                      animated={!pointer.reduced}
+                      scrollTarget={heroRef}
+                    />
                   </div>
                 </Suspense>
               </ErrorBoundary>
