@@ -1,5 +1,4 @@
-import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import * as THREE from "three";
 import type { ThemePalette } from "@/hooks/use-theme-palette";
 
@@ -7,21 +6,28 @@ import type { ThemePalette } from "@/hooks/use-theme-palette";
  * Hero3DScene — the landing page's WebGL centrepiece.
  *
  * A rotating "agile network": a faceted core, a counter-rotating wireframe
- * shell, and a constellation of nodes wired to their nearest neighbours. It is
- * driven by three.js through @react-three/fiber and picks its colours from the
- * active theme's CSS variables, so it re-skins with Graphite / Modern Minimal /
- * Darkmatter automatically.
+ * shell and a constellation of nodes wired to their nearest neighbours.
  *
- * Fully defensive: the component renders nothing to the DOM beyond a canvas and
- * the parent (Landing) guards it with a WebGL check, a Suspense boundary and an
- * error boundary.
+ * Implemented with plain three.js and a requestAnimationFrame loop. Colours are
+ * read from the active theme so the scene re-skins with Graphite / Modern
+ * Minimal / Darkmatter automatically.
+ *
+ * Fully defensive: if the renderer cannot be created nothing is appended, and
+ * the parent (Landing) already guards this with a WebGL check, a Suspense
+ * boundary and an error boundary.
  */
 
 interface SceneProps {
   palette: ThemePalette;
-  /** When false (prefers-reduced-motion) the scene stays perfectly still. */
+  /** When false (prefers-reduced-motion) the scene renders a single still frame. */
   animated?: boolean;
 }
+
+/** Resting pose so the scene reads well even when nothing is animating. */
+const BASE_ROTATION_X = 0.16;
+const BASE_ROTATION_Y = 0.35;
+const NODE_COUNT = 18;
+const NODE_RADIUS = 2.15;
 
 /** Evenly distributes `count` points over a sphere of `radius`. */
 function fibonacciSphere(count: number, radius: number): THREE.Vector3[] {
@@ -42,8 +48,8 @@ function fibonacciSphere(count: number, radius: number): THREE.Vector3[] {
   return points;
 }
 
-/** Connects every node to its two closest neighbours. */
-function buildEdges(points: THREE.Vector3[]): Float32Array {
+/** Builds a line-segment buffer connecting every node to its two closest neighbours. */
+function buildEdgePositions(points: THREE.Vector3[]): Float32Array {
   const positions: number[] = [];
   points.forEach((point, i) => {
     const nearest = points
@@ -59,143 +65,328 @@ function buildEdges(points: THREE.Vector3[]): Float32Array {
   return new Float32Array(positions);
 }
 
-/** Resting pose so the scene reads well even when nothing is animating. */
-const BASE_ROTATION_X = 0.16;
-const BASE_ROTATION_Y = 0.35;
-
-function AgileCore({ palette, animated = true }: SceneProps) {
-  const root = useRef<THREE.Group>(null);
-  const shell = useRef<THREE.Mesh>(null);
-  const core = useRef<THREE.Mesh>(null);
-  const nodesGroup = useRef<THREE.Group>(null);
-  const pointer = useThree((state) => state.pointer);
-  const elapsed = useRef(0);
-
-  const nodes = useMemo(() => fibonacciSphere(18, 2.15), []);
-  const edges = useMemo(() => buildEdges(nodes), [nodes]);
-
-  const edgeGeometry = useMemo(() => {
-    const geometry = new THREE.BufferGeometry();
-    geometry.setAttribute("position", new THREE.BufferAttribute(edges, 3));
-    return geometry;
-  }, [edges]);
-
-  useEffect(() => () => edgeGeometry.dispose(), [edgeGeometry]);
-
-  const accent = useMemo(() => new THREE.Color(palette.accent), [palette.accent]);
-  const accentLight = useMemo(() => new THREE.Color(palette.accentLight), [palette.accentLight]);
-  const accentDark = useMemo(() => new THREE.Color(palette.accentDark), [palette.accentDark]);
-
-  useFrame((_, delta) => {
-    // Clamp delta so a backgrounded tab cannot jump the animation on return.
-    const step = Math.min(delta, 0.05);
-    if (animated) elapsed.current += step;
-    const t = elapsed.current;
-
-    const group = root.current;
-    if (group) {
-      // A slight three-quarter pose, nudged by the pointer.
-      const targetY = BASE_ROTATION_Y + pointer.x * 0.38;
-      const targetX = BASE_ROTATION_X - pointer.y * 0.26;
-      group.rotation.y += (targetY - group.rotation.y) * 0.05;
-      group.rotation.x += (targetX - group.rotation.x) * 0.05;
-    }
-
-    if (shell.current) {
-      shell.current.rotation.y = t * 0.14;
-      shell.current.rotation.z = t * 0.06;
-    }
-
-    if (core.current) {
-      core.current.rotation.y = -t * 0.26;
-      core.current.rotation.x = t * 0.12;
-      const pulse = 1 + Math.sin(t * 1.15) * 0.045;
-      core.current.scale.setScalar(pulse);
-    }
-
-    if (nodesGroup.current) {
-      nodesGroup.current.rotation.y = -t * 0.09;
-      nodesGroup.current.rotation.x = Math.sin(t * 0.25) * 0.12;
-    }
-  });
-
-  return (
-    <group ref={root} rotation={[BASE_ROTATION_X, BASE_ROTATION_Y, 0]}>
-      <ambientLight intensity={0.75} />
-      <directionalLight position={[5, 6, 7]} intensity={2} />
-      <pointLight position={[-6, -4, -5]} intensity={45} color={palette.glow} />
-      <pointLight position={[4, -5, 3]} intensity={30} color={palette.accentLight} />
-
-      {/* Outer wireframe shell */}
-      <mesh ref={shell}>
-        <icosahedronGeometry args={[2.55, 1]} />
-        <meshBasicMaterial color={accent} wireframe transparent opacity={0.17} />
-      </mesh>
-
-      {/* Faceted core */}
-      <mesh ref={core}>
-        <icosahedronGeometry args={[1.15, 1]} />
-        <meshStandardMaterial
-          color={accent}
-          emissive={accentDark}
-          emissiveIntensity={0.45}
-          roughness={0.35}
-          metalness={0.62}
-          flatShading
-        />
-      </mesh>
-
-      {/* Inner glow sphere */}
-      <mesh scale={1.42}>
-        <sphereGeometry args={[1.15, 24, 24]} />
-        <meshBasicMaterial color={accentLight} transparent opacity={0.06} />
-      </mesh>
-
-      {/* Constellation of nodes + edges */}
-      <group ref={nodesGroup}>
-        <lineSegments geometry={edgeGeometry}>
-          <lineBasicMaterial color={accentLight} transparent opacity={0.32} />
-        </lineSegments>
-        {nodes.map((node, i) => (
-          <mesh key={i} position={[node.x, node.y, node.z]}>
-            <sphereGeometry args={[0.052, 12, 12]} />
-            <meshBasicMaterial color={i % 4 === 0 ? accentLight : accent} />
-          </mesh>
-        ))}
-      </group>
-    </group>
-  );
+/** Everything the render loop needs, kept out of React state. */
+interface SceneHandles {
+  renderer: THREE.WebGLRenderer;
+  scene: THREE.Scene;
+  camera: THREE.PerspectiveCamera;
+  root: THREE.Group;
+  shell: THREE.Mesh;
+  core: THREE.Mesh;
+  halo: THREE.Mesh;
+  nodes: THREE.InstancedMesh;
+  edgeMaterial: THREE.LineBasicMaterial;
+  shellMaterial: THREE.MeshBasicMaterial;
+  coreMaterial: THREE.MeshStandardMaterial;
+  haloMaterial: THREE.MeshBasicMaterial;
+  nodeMaterial: THREE.MeshBasicMaterial;
+  glowLight: THREE.PointLight;
+  rimLight: THREE.PointLight;
+  disposables: Array<{ dispose: () => void }>;
 }
 
 export default function Hero3DScene({ palette, animated = true }: SceneProps) {
-  const [inView, setInView] = useState(true);
   const host = useRef<HTMLDivElement>(null);
+  const handles = useRef<SceneHandles | null>(null);
+  const animatedRef = useRef(animated);
 
-  // Stop rendering frames while the hero is scrolled out of view.
   useEffect(() => {
-    const element = host.current;
-    if (!element || typeof IntersectionObserver === "undefined") return;
-    const observer = new IntersectionObserver(
-      (entries) => setInView(entries.some((entry) => entry.isIntersecting)),
-      { rootMargin: "120px" },
+    animatedRef.current = animated;
+  }, [animated]);
+
+  /* ── Build the scene once ─────────────────────────────────── */
+  useEffect(() => {
+    const hostEl = host.current;
+    if (!hostEl) return;
+
+    let renderer: THREE.WebGLRenderer;
+    try {
+      renderer = new THREE.WebGLRenderer({
+        alpha: true,
+        antialias: true,
+        powerPreference: "high-performance",
+      });
+    } catch (error) {
+      console.warn("[landing] WebGL unavailable, keeping the CSS backdrop", error);
+      return;
+    }
+
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.6));
+    renderer.setClearAlpha(0);
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.domElement.style.width = "100%";
+    renderer.domElement.style.height = "100%";
+    renderer.domElement.style.display = "block";
+    hostEl.appendChild(renderer.domElement);
+
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 100);
+    camera.position.set(0, 0, 7.2);
+
+    const disposables: Array<{ dispose: () => void }> = [];
+    const track = <T extends { dispose: () => void }>(resource: T): T => {
+      disposables.push(resource);
+      return resource;
+    };
+
+    const root = new THREE.Group();
+    root.rotation.set(BASE_ROTATION_X, BASE_ROTATION_Y, 0);
+    scene.add(root);
+
+    /* Lights (three r155+ uses physically-correct units) */
+    scene.add(new THREE.AmbientLight(0xffffff, 0.75));
+    const keyLight = new THREE.DirectionalLight(0xffffff, 2);
+    keyLight.position.set(5, 6, 7);
+    scene.add(keyLight);
+    const glowLight = new THREE.PointLight(new THREE.Color(palette.glow), 45);
+    glowLight.position.set(-6, -4, -5);
+    scene.add(glowLight);
+    const rimLight = new THREE.PointLight(new THREE.Color(palette.accentLight), 30);
+    rimLight.position.set(4, -5, 3);
+    scene.add(rimLight);
+
+    /* Outer wireframe shell */
+    const shellMaterial = track(
+      new THREE.MeshBasicMaterial({
+        color: new THREE.Color(palette.accent),
+        wireframe: true,
+        transparent: true,
+        opacity: 0.17,
+      }),
     );
-    observer.observe(element);
-    return () => observer.disconnect();
+    const shell = new THREE.Mesh(track(new THREE.IcosahedronGeometry(2.55, 1)), shellMaterial);
+    root.add(shell);
+
+    /* Faceted core */
+    const coreMaterial = track(
+      new THREE.MeshStandardMaterial({
+        color: new THREE.Color(palette.accent),
+        emissive: new THREE.Color(palette.accentDark),
+        emissiveIntensity: 0.45,
+        roughness: 0.35,
+        metalness: 0.62,
+        flatShading: true,
+      }),
+    );
+    const core = new THREE.Mesh(track(new THREE.IcosahedronGeometry(1.15, 1)), coreMaterial);
+    root.add(core);
+
+    /* Soft halo */
+    const haloMaterial = track(
+      new THREE.MeshBasicMaterial({
+        color: new THREE.Color(palette.accentLight),
+        transparent: true,
+        opacity: 0.06,
+      }),
+    );
+    const halo = new THREE.Mesh(track(new THREE.SphereGeometry(1.15, 24, 24)), haloMaterial);
+    halo.scale.setScalar(1.42);
+    root.add(halo);
+
+    /* Node constellation + edges */
+    const nodePoints = fibonacciSphere(NODE_COUNT, NODE_RADIUS);
+    const edgeGeometry = track(new THREE.BufferGeometry());
+    edgeGeometry.setAttribute(
+      "position",
+      new THREE.BufferAttribute(buildEdgePositions(nodePoints), 3),
+    );
+    const edgeMaterial = track(
+      new THREE.LineBasicMaterial({
+        color: new THREE.Color(palette.accentLight),
+        transparent: true,
+        opacity: 0.32,
+      }),
+    );
+    root.add(new THREE.LineSegments(edgeGeometry, edgeMaterial));
+
+    // One instanced draw call for all the nodes.
+    const nodeMaterial = track(
+      new THREE.MeshBasicMaterial({ color: new THREE.Color(palette.accent) }),
+    );
+    const nodes = new THREE.InstancedMesh(
+      track(new THREE.SphereGeometry(0.052, 12, 12)),
+      nodeMaterial,
+      NODE_COUNT,
+    );
+    const matrix = new THREE.Matrix4();
+    const highlight = new THREE.Color(palette.accentLight);
+    nodePoints.forEach((point, i) => {
+      nodes.setMatrixAt(i, matrix.makeTranslation(point.x, point.y, point.z));
+      const color = i % 4 === 0 ? highlight : new THREE.Color(palette.accent);
+      nodes.setColorAt(i, color);
+    });
+    nodes.instanceMatrix.needsUpdate = true;
+    if (nodes.instanceColor) nodes.instanceColor.needsUpdate = true;
+    root.add(nodes);
+
+    handles.current = {
+      renderer,
+      scene,
+      camera,
+      root,
+      shell,
+      core,
+      halo,
+      nodes,
+      edgeMaterial,
+      shellMaterial,
+      coreMaterial,
+      haloMaterial,
+      nodeMaterial,
+      glowLight,
+      rimLight,
+      disposables,
+    };
+
+    /* ── Sizing ─────────────────────────────────────────────── */
+    const resize = () => {
+      const { clientWidth, clientHeight } = hostEl;
+      const width = Math.max(clientWidth, 1);
+      const height = Math.max(clientHeight, 1);
+      renderer.setSize(width, height, false);
+      camera.aspect = width / height;
+      camera.updateProjectionMatrix();
+      renderer.render(scene, camera);
+    };
+    resize();
+
+    /* ── Pointer parallax ───────────────────────────────────── */
+    const pointer = { x: 0, y: 0 };
+    const handlePointerMove = (event: PointerEvent) => {
+      const rect = hostEl.getBoundingClientRect();
+      if (rect.width === 0 || rect.height === 0) return;
+      pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+      pointer.y = ((event.clientY - rect.top) / rect.height) * 2 - 1;
+    };
+    const handlePointerLeave = () => {
+      pointer.x = 0;
+      pointer.y = 0;
+    };
+    hostEl.addEventListener("pointermove", handlePointerMove);
+    hostEl.addEventListener("pointerleave", handlePointerLeave);
+
+    /* ── Render loop ────────────────────────────────────────── */
+    const clock = new THREE.Clock();
+    let elapsed = 0;
+    let frame = 0;
+    let running = false;
+
+    const renderFrame = (delta: number) => {
+      if (animatedRef.current) elapsed += delta;
+      const t = elapsed;
+
+      // A slight three-quarter pose, nudged by the pointer.
+      root.rotation.y += (BASE_ROTATION_Y + pointer.x * 0.38 - root.rotation.y) * 0.05;
+      root.rotation.x += (BASE_ROTATION_X - pointer.y * 0.26 - root.rotation.x) * 0.05;
+
+      shell.rotation.y = t * 0.14;
+      shell.rotation.z = t * 0.06;
+
+      core.rotation.y = -t * 0.26;
+      core.rotation.x = t * 0.12;
+      core.scale.setScalar(1 + Math.sin(t * 1.15) * 0.045);
+
+      nodes.rotation.y = -t * 0.09;
+      nodes.rotation.x = Math.sin(t * 0.25) * 0.12;
+
+      renderer.render(scene, camera);
+    };
+
+    const tick = () => {
+      frame = window.requestAnimationFrame(tick);
+      // Clamp delta so a backgrounded tab cannot jump the animation on return.
+      renderFrame(Math.min(clock.getDelta(), 0.05));
+    };
+
+    const start = () => {
+      if (running) return;
+      running = true;
+      clock.getDelta();
+      tick();
+    };
+
+    const stop = () => {
+      running = false;
+      window.cancelAnimationFrame(frame);
+    };
+
+    /* ── Pause when scrolled out of view / reduced motion ───── */
+    let inView = true;
+    const sync = () => {
+      if (animatedRef.current && inView) {
+        start();
+      } else {
+        stop();
+        renderFrame(0);
+      }
+    };
+
+    let observer: IntersectionObserver | null = null;
+    if (typeof IntersectionObserver !== "undefined") {
+      observer = new IntersectionObserver(
+        (entries) => {
+          inView = entries.some((entry) => entry.isIntersecting);
+          sync();
+        },
+        { rootMargin: "120px" },
+      );
+      observer.observe(hostEl);
+    }
+
+    const handleResize = () => {
+      resize();
+      if (!(animatedRef.current && inView)) renderFrame(0);
+    };
+    window.addEventListener("resize", handleResize);
+
+    sync();
+
+    return () => {
+      stop();
+      observer?.disconnect();
+      window.removeEventListener("resize", handleResize);
+      hostEl.removeEventListener("pointermove", handlePointerMove);
+      hostEl.removeEventListener("pointerleave", handlePointerLeave);
+      disposables.forEach((resource) => resource.dispose());
+      nodes.dispose();
+      renderer.dispose();
+      renderer.domElement.remove();
+      handles.current = null;
+    };
+    // Built once; theme changes are applied in the effect below.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const live = inView && animated;
+  /* ── Re-skin on theme change ──────────────────────────────── */
+  useEffect(() => {
+    const scene = handles.current;
+    if (!scene) return;
 
-  return (
-    <div ref={host} className="h-full w-full">
-      <Canvas
-        camera={{ position: [0, 0, 7.2], fov: 42 }}
-        dpr={[1, 1.8]}
-        gl={{ alpha: true, antialias: true, powerPreference: "high-performance" }}
-        frameloop={live ? "always" : "demand"}
-        style={{ width: "100%", height: "100%" }}
-      >
-        <AgileCore palette={palette} animated={animated} />
-      </Canvas>
-    </div>
-  );
+    scene.edgeMaterial.color.set(palette.accentLight);
+    scene.shellMaterial.color.set(palette.accent);
+    scene.coreMaterial.color.set(palette.accent);
+    scene.coreMaterial.emissive.set(palette.accentDark);
+    scene.haloMaterial.color.set(palette.accentLight);
+    scene.glowLight.color.set(palette.glow);
+    scene.rimLight.color.set(palette.accentLight);
+
+    const accent = new THREE.Color(palette.accent);
+    const highlight = new THREE.Color(palette.accentLight);
+    for (let i = 0; i < NODE_COUNT; i += 1) {
+      const color = i % 4 === 0 ? highlight : accent;
+      scene.nodes.setColorAt(i, color);
+    }
+    if (scene.nodes.instanceColor) scene.nodes.instanceColor.needsUpdate = true;
+
+    scene.renderer.render(scene.scene, scene.camera);
+  }, [palette]);
+
+  useEffect(() => {
+    const scene = handles.current;
+    if (!scene || animated) return;
+    // Reduced motion: settle on a clean still frame.
+    scene.renderer.render(scene.scene, scene.camera);
+  }, [animated]);
+
+  return <div ref={host} className="h-full w-full" />;
 }
