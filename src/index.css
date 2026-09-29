@@ -443,3 +443,66 @@
 .animate-slide-in-right {
   animation: slideInRight 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 }
+
+/* ════════════════════════════════════════════════════════════════
+   LANDING — decorative layers (theme-aware, motion-safe)
+   ════════════════════════════════════════════════════════════════ */
+
+/* Fine technical grid that fades out toward the bottom */
+.landing-grid {
+  background-image:
+    linear-gradient(to right, color-mix(in srgb, var(--foreground) 8%, transparent) 1px, transparent 1px),
+    linear-gradient(to bottom, color-mix(in srgb, var(--foreground) 8%, transparent) 1px, transparent 1px);
+  background-size: 58px 58px;
+  -webkit-mask-image: radial-gradient(ellipse 90% 65% at 50% 0%, #000 25%, transparent 100%);
+  mask-image: radial-gradient(ellipse 90% 65% at 50% 0%, #000 25%, transparent 100%);
+}
+
+/* Soft drifting colour fields behind the hero */
+.landing-aurora {
+  filter: blur(70px);
+  opacity: 0.4;
+  animation: auroraDrift 18s ease-in-out infinite alternate;
+}
+
+@keyframes auroraDrift {
+  from { transform: translate3d(-3%, -2%, 0) scale(1); }
+  to { transform: translate3d(4%, 5%, 0) scale(1.14); }
+}
+
+/* Gradient text built from the active theme's accent ramp */
+.landing-shine {
+  background: linear-gradient(
+    100deg,
+    var(--aie-accent-light) 0%,
+    var(--aie-accent) 40%,
+    var(--aie-accent-dark) 100%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Infinite marquee strip */
+.landing-marquee {
+  display: flex;
+  width: max-content;
+  animation: marqueeX 34s linear infinite;
+}
+
+@keyframes marqueeX {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+
+/* Hairline separators that read well on every theme */
+.landing-rule {
+  background: linear-gradient(to right, transparent, var(--glass-border), transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing-aurora,
+  .landing-marquee {
+    animation: none !important;
+  }
+}
