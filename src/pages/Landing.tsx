@@ -20,17 +20,24 @@ import {
   Zap,
 } from "lucide-react";
 import { lazy, Suspense, useCallback, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import { useNavigate } from "react-router";
 import { AIELogo } from "@/components/AIELogo";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AnimatedCounter } from "@/components/landing/AnimatedCounter";
+import { CustomCursor } from "@/components/landing/CustomCursor";
+import { DepthTransition } from "@/components/landing/DepthTransition";
+import { MagneticButton } from "@/components/landing/MagneticButton";
 import { ScrollProgressBar } from "@/components/landing/ScrollProgressBar";
 import { ScrollReveal } from "@/components/landing/ScrollReveal";
+import { TiltCard } from "@/components/landing/TiltCard";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { usePointerMode } from "@/hooks/use-pointer-mode";
 import { useScrollSpine } from "@/hooks/use-scroll-spine";
+import { useSmoothScroll } from "@/hooks/use-smooth-scroll";
 import { useThemePalette } from "@/hooks/use-theme-palette";
-import { prefersReducedMotion, supportsWebGL } from "@/lib/motion-prefs";
+import { supportsWebGL } from "@/lib/motion-prefs";
 
 /** three.js only loads when a WebGL context is actually available. */
 const Hero3DScene = lazy(() => import("@/components/landing/Hero3DScene"));
@@ -76,6 +83,24 @@ const features = [
   },
 ];
 
+const pillars = [
+  {
+    icon: Layers,
+    label: "Plan",
+    body: "Epics, stories, tasks and bugs in one hierarchy, with points, labels and due dates.",
+  },
+  {
+    icon: Columns3,
+    label: "Run",
+    body: "A board that reflects what is actually happening, not what you planned last week.",
+  },
+  {
+    icon: Radar,
+    label: "Read",
+    body: "Velocity, burndown, workload and risk drawn from the same data — plus AI notes on all of it.",
+  },
+];
+
 const marqueeItems = [
   "Sprint planning",
   "Backlog grooming",
@@ -92,10 +117,10 @@ const marqueeItems = [
 ];
 
 const stats = [
-  { value: 6, suffix: "", label: "Product modules", detail: "Dashboard, Backlog, Sprint Board, Tasks, Team, Risks" },
-  { value: 4, suffix: "", label: "Sprint stages", detail: "To Do → In Progress → Review → Done" },
-  { value: 6, suffix: "", label: "Analytics views", detail: "Velocity, completion, progress, priority, workload, risk" },
-  { value: 3, suffix: "", label: "Appearance themes", detail: "Graphite, Modern Minimal, Darkmatter" },
+  { value: 6, label: "Product modules", detail: "Dashboard, Backlog, Sprint Board, Tasks, Team, Risks" },
+  { value: 4, label: "Sprint stages", detail: "To Do → In Progress → Review → Done" },
+  { value: 6, label: "Analytics views", detail: "Velocity, completion, progress, priority, workload, risk" },
+  { value: 3, label: "Appearance themes", detail: "Graphite, Modern Minimal, Darkmatter" },
 ];
 
 const steps = [
@@ -109,10 +134,10 @@ const steps = [
     icon: Columns3,
     title: "Plan and run the sprint",
     body: "Move work across To Do, In Progress, Review and Done. Assign owners, set priorities and keep the board honest as the sprint progresses.",
-    points: ["Drag-and-drop Kanban", "Assignees and priorities", "Filters across the whole workspace"],
+    points: ["Drag-and-drop Kanban", "Assignees and priorities", "Workspace-wide filters"],
   },
   {
-    icon: Radar,
+    icon: Brain,
     title: "Read the signal",
     body: "Your activity becomes velocity trends, burndown, workload distribution and a probability-impact risk matrix — with the AI engine pointing at what needs attention next.",
     points: ["Velocity and burndown", "Workload and capacity", "AI notes on sprint health"],
@@ -141,6 +166,19 @@ const insightSample = {
   ],
 };
 
+const navLinks = [
+  { id: "features", label: "Features" },
+  { id: "how", label: "How it works" },
+  { id: "intelligence", label: "Intelligence" },
+];
+
+function Kicker({ children }: { children: ReactNode }) {
+  return (
+    <p className="text-[11px] font-semibold tracking-[0.18em] text-primary uppercase">{children}</p>
+  );
+}
+
+/** Static CSS ring illustration shown behind — and instead of — the WebGL scene. */
 function HeroBackdrop() {
   return (
     <div aria-hidden="true" className="pointer-events-none absolute inset-0 flex items-center justify-center">
@@ -165,12 +203,16 @@ function RiskLevel({ label, tone }: { label: string; tone: "destructive" | "defa
 export default function Landing() {
   const navigate = useNavigate();
   const palette = useThemePalette();
+  const pointer = usePointerMode();
+  const { scrollTo } = useSmoothScroll();
   const heroRef = useRef<HTMLElement>(null);
   const spine = useScrollSpine<HTMLDivElement>();
 
-  // Sensible one-time capability checks (no re-render churn).
   const [canRender3D] = useState(() => supportsWebGL());
-  const [motionOk] = useState(() => !prefersReducedMotion());
+
+  // Hover-driven effects are collapsed into one decision so the page degrades
+  // to a calm, static composition on touch devices and for reduced motion.
+  const interactive = pointer.hover;
 
   const { scrollYProgress } = useScroll({
     target: heroRef,
@@ -179,23 +221,13 @@ export default function Landing() {
   const copyY = useTransform(scrollYProgress, [0, 1], [0, 90]);
   const copyOpacity = useTransform(scrollYProgress, [0, 0.9], [1, 0]);
   const sceneY = useTransform(scrollYProgress, [0, 1], [0, -60]);
+  const sceneScale = useTransform(scrollYProgress, [0, 1], [1, 0.9]);
 
   const goToAuth = useCallback(() => navigate(AUTH_ROUTE), [navigate]);
 
-  const scrollTo = useCallback((id: string) => {
-    const target = document.getElementById(id);
-    if (!target) return;
-    target.scrollIntoView({ behavior: prefersReducedMotion() ? "auto" : "smooth", block: "start" });
-  }, []);
-
-  const navLinks = [
-    { id: "features", label: "Features" },
-    { id: "how", label: "How it works" },
-    { id: "intelligence", label: "Intelligence" },
-  ];
-
   return (
-    <div className="min-h-screen overflow-x-hidden">
+    <div className="aie-page min-h-screen" data-custom-cursor={interactive ? "true" : undefined}>
+      <CustomCursor enabled={interactive} />
       <ScrollProgressBar />
 
       {/* ── Nav ─────────────────────────────────────────────── */}
@@ -203,7 +235,8 @@ export default function Landing() {
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
           <button
             type="button"
-            onClick={() => scrollTo("top")}
+            onClick={() => scrollTo("top", 0)}
+            data-cursor="hover"
             className="flex items-center gap-2.5 rounded-lg px-1 py-1 text-left"
           >
             <AIELogo size="sm" />
@@ -221,6 +254,7 @@ export default function Landing() {
                 key={link.id}
                 type="button"
                 onClick={() => scrollTo(link.id)}
+                data-cursor="hover"
                 className="rounded-lg px-3 py-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground"
               >
                 {link.label}
@@ -229,12 +263,14 @@ export default function Landing() {
           </div>
 
           <div className="flex items-center gap-2">
-            <Button variant="ghost" size="sm" onClick={goToAuth}>
+            <Button variant="ghost" size="sm" onClick={goToAuth} data-cursor="hover">
               Sign In
             </Button>
-            <Button size="sm" onClick={goToAuth} className="gap-1.5">
-              Get Started <ArrowRight className="h-3.5 w-3.5" />
-            </Button>
+            <MagneticButton enabled={interactive} strength={5}>
+              <Button size="sm" onClick={goToAuth} data-cursor="hover" className="gap-1.5">
+                Get Started <ArrowRight className="h-3.5 w-3.5" />
+              </Button>
+            </MagneticButton>
           </div>
         </div>
       </nav>
@@ -252,9 +288,9 @@ export default function Landing() {
           style={{ animationDelay: "-6s" }}
         />
 
-        <div className="relative mx-auto grid max-w-6xl items-center gap-12 px-4 pt-16 pb-20 sm:px-6 sm:pt-24 lg:grid-cols-[1.04fr_0.96fr] lg:gap-8 lg:pt-28">
+        <div className="relative mx-auto grid max-w-6xl items-center gap-12 px-4 pt-14 pb-16 sm:px-6 sm:pt-24 lg:grid-cols-[1.04fr_0.96fr] lg:gap-8 lg:pt-28">
           {/* Copy */}
-          <motion.div style={motionOk ? { y: copyY, opacity: copyOpacity } : undefined} className="max-w-2xl">
+          <motion.div style={interactive ? { y: copyY, opacity: copyOpacity } : undefined} className="max-w-2xl">
             <ScrollReveal trigger="mount" selector="[data-intro]" delay={110} y={18} duration={720}>
               <div data-intro>
                 <Badge
@@ -266,34 +302,45 @@ export default function Landing() {
                 </Badge>
               </div>
 
-              <h1 className="mt-6 text-4xl leading-[1.06] font-bold tracking-tight sm:text-5xl lg:text-[3.4rem]">
-                <ScrollReveal
-                  as="span"
-                  className="block"
-                  trigger="mount"
-                  selector="[data-hero-line]"
-                  delay={130}
-                  y="112%"
-                  duration={920}
-                  ease="out(4)"
-                >
-                  <span className="block overflow-hidden pb-1">
-                    <span data-hero-line className="block">
-                      Manage Agile.
+              {/* Dimensional typography: the block tilts toward the cursor while
+                  each line drifts at its own rate via the layer utilities. */}
+              <TiltCard
+                surface={false}
+                glow={false}
+                intensity={3.5}
+                lift={0}
+                interactive={interactive}
+                className="mt-6"
+              >
+                <h1 className="text-[2.1rem] leading-[1.08] font-bold tracking-tight sm:text-5xl lg:text-[3.4rem]">
+                  <ScrollReveal
+                    as="span"
+                    className="block"
+                    trigger="mount"
+                    selector="[data-hero-line]"
+                    delay={130}
+                    y="112%"
+                    duration={920}
+                    ease="out(4)"
+                  >
+                    <span className="aie-layer-mid block overflow-hidden pb-1">
+                      <span data-hero-line className="block">
+                        Manage Agile.
+                      </span>
                     </span>
-                  </span>
-                  <span className="block overflow-hidden pb-1">
-                    <span data-hero-line className="landing-shine block">
-                      Understand Progress.
+                    <span className="aie-layer-near block overflow-hidden pb-1">
+                      <span data-hero-line className="landing-shine block">
+                        Understand Progress.
+                      </span>
                     </span>
-                  </span>
-                  <span className="block overflow-hidden pb-1">
-                    <span data-hero-line className="block">
-                      Predict Risk.
+                    <span className="aie-layer-mid block overflow-hidden pb-1">
+                      <span data-hero-line className="block">
+                        Predict Risk.
+                      </span>
                     </span>
-                  </span>
-                </ScrollReveal>
-              </h1>
+                  </ScrollReveal>
+                </h1>
+              </TiltCard>
 
               <p className="mt-6 max-w-xl text-sm leading-relaxed text-muted-foreground sm:text-base">
                 AIE is an intelligent Agile platform that helps software teams plan sprints, manage tasks, track
@@ -302,10 +349,18 @@ export default function Landing() {
               </p>
 
               <div data-intro className="mt-8 flex flex-wrap items-center gap-3">
-                <Button size="lg" onClick={goToAuth} className="gap-2 px-6">
-                  Open the dashboard <ArrowRight className="h-4 w-4" />
-                </Button>
-                <Button size="lg" variant="outline" onClick={() => scrollTo("how")} className="gap-2 px-6">
+                <MagneticButton enabled={interactive} strength={8}>
+                  <Button size="lg" onClick={goToAuth} data-cursor="hover" className="gap-2 px-6">
+                    Open the dashboard <ArrowRight className="h-4 w-4" />
+                  </Button>
+                </MagneticButton>
+                <Button
+                  size="lg"
+                  variant="outline"
+                  onClick={() => scrollTo("how")}
+                  data-cursor="hover"
+                  className="gap-2 px-6"
+                >
                   See how it works
                 </Button>
               </div>
@@ -318,13 +373,20 @@ export default function Landing() {
                   </li>
                 ))}
               </ul>
+
+              <div data-intro className="mt-9 hidden items-center gap-3 sm:flex">
+                <span aria-hidden="true" className="h-10 w-px animate-pulse bg-gradient-to-b from-primary to-transparent" />
+                <span className="text-[10px] font-medium tracking-[0.2em] text-muted-foreground uppercase">
+                  Scroll
+                </span>
+              </div>
             </ScrollReveal>
           </motion.div>
 
           {/* 3D scene */}
           <motion.div
-            style={motionOk ? { y: sceneY } : undefined}
-            className="relative mx-auto h-[330px] w-full max-w-[520px] sm:h-[420px] lg:h-[540px] lg:max-w-none"
+            style={interactive ? { y: sceneY, scale: sceneScale } : undefined}
+            className="relative mx-auto h-[300px] w-full max-w-[520px] sm:h-[420px] lg:h-[540px] lg:max-w-none"
           >
             <HeroBackdrop />
             {canRender3D ? (
@@ -333,7 +395,7 @@ export default function Landing() {
               <ErrorBoundary fallback={<div aria-hidden="true" />}>
                 <Suspense fallback={<div aria-hidden="true" />}>
                   <div className="absolute inset-0">
-                    <Hero3DScene palette={palette} animated={motionOk} />
+                    <Hero3DScene palette={palette} animated={!pointer.reduced} />
                   </div>
                 </Suspense>
               </ErrorBoundary>
@@ -360,17 +422,56 @@ export default function Landing() {
         </div>
       </section>
 
+      <DepthTransition label="From plan to signal" animated={!pointer.reduced} />
+
+      {/* ── Introduction ────────────────────────────────────── */}
+      <section className="pt-20 pb-16 sm:pt-24 sm:pb-20">
+        <div className="mx-auto max-w-6xl px-4 sm:px-6">
+          <ScrollReveal className="max-w-3xl" delay={70} y={26}>
+            <Kicker>The idea</Kicker>
+            <p className="mt-5 text-xl leading-snug font-semibold tracking-tight sm:text-3xl">
+              Most teams do not need another board. They need to know{" "}
+              <span className="landing-shine">what the board is telling them</span> — before the sprint ends.
+            </p>
+          </ScrollReveal>
+
+          <ScrollReveal className="mx-auto mt-6 max-w-2xl text-sm leading-relaxed text-muted-foreground" delay={120} y={20}>
+            <p>
+              AIE reads the stories, sprints, risks and time entries already on your board and turns them into
+              something a human can act on. No invented metrics, no parallel spreadsheet — one working surface that
+              explains itself.
+            </p>
+          </ScrollReveal>
+
+          <ScrollReveal className="mt-14 grid gap-4 sm:grid-cols-3" delay={90} y={26}>
+            {pillars.map((pillar) => (
+              <div key={pillar.label} className="h-full">
+                <TiltCard className="h-full p-5" intensity={4} lift={6} interactive={interactive} glow>
+                  <div className="aie-layer-mid flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10">
+                    <pillar.icon className="h-4 w-4 text-primary" />
+                  </div>
+                  <p className="mt-4 text-sm font-bold">{pillar.label}</p>
+                  <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">{pillar.body}</p>
+                </TiltCard>
+              </div>
+            ))}
+          </ScrollReveal>
+        </div>
+      </section>
+
       {/* ── Stats ───────────────────────────────────────────── */}
-      <section className="py-16 sm:py-20">
+      <section className="pb-16 sm:pb-20">
         <div className="mx-auto max-w-6xl px-4 sm:px-6">
           <ScrollReveal className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4" delay={80} y={22}>
             {stats.map((stat) => (
-              <div key={stat.label} className="glass-card p-5">
-                <p className="text-3xl font-bold tracking-tight text-primary">
-                  <AnimatedCounter to={stat.value} suffix={stat.suffix} />
-                </p>
-                <p className="mt-1.5 text-sm font-semibold">{stat.label}</p>
-                <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">{stat.detail}</p>
+              <div key={stat.label} className="h-full">
+                <TiltCard className="h-full p-5" intensity={3.5} lift={5} interactive={interactive} glow={false}>
+                  <p className="aie-layer-mid text-3xl font-bold tracking-tight text-primary">
+                    <AnimatedCounter to={stat.value} />
+                  </p>
+                  <p className="mt-1.5 text-sm font-semibold">{stat.label}</p>
+                  <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">{stat.detail}</p>
+                </TiltCard>
               </div>
             ))}
           </ScrollReveal>
@@ -381,9 +482,7 @@ export default function Landing() {
       <section id="features" className="scroll-mt-20 py-12 sm:py-16">
         <div className="mx-auto max-w-6xl px-4 sm:px-6">
           <ScrollReveal className="mx-auto mb-12 max-w-2xl text-center" delay={0} y={20}>
-            <p className="text-[11px] font-semibold tracking-[0.18em] text-primary uppercase">
-              Everything in one place
-            </p>
+            <Kicker>Everything in one place</Kicker>
             <h2 className="mt-3 text-2xl font-bold tracking-tight sm:text-3xl">
               Built for how software teams actually work
             </h2>
@@ -393,23 +492,28 @@ export default function Landing() {
             </p>
           </ScrollReveal>
 
-          <ScrollReveal
-            className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3"
-            delay={85}
-            y={26}
-            scaleFrom={0.97}
-          >
-            {features.map((feature) => (
-              <article key={feature.title} className="glass-card group h-full p-6">
-                <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 transition-colors group-hover:bg-primary/15">
-                  <feature.icon className="h-5 w-5 text-primary" />
-                </div>
-                <h3 className="mb-2 flex items-center gap-1.5 text-sm font-bold">
-                  {feature.title}
-                  <ArrowUpRight className="h-3.5 w-3.5 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
-                </h3>
-                <p className="text-xs leading-relaxed text-muted-foreground">{feature.description}</p>
-              </article>
+          <ScrollReveal className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3" delay={85} y={26}>
+            {features.map((feature, index) => (
+              <div key={feature.title} className="h-full">
+                <TiltCard
+                  as="article"
+                  className="group h-full p-5 sm:p-6"
+                  // Alternating intensity keeps the grid from feeling mechanical.
+                  intensity={index % 3 === 0 ? 5 : index % 3 === 1 ? 6 : 4.5}
+                  lift={7}
+                  interactive={interactive}
+                  cursorLabel="Explore"
+                >
+                  <div className="aie-layer-mid mb-4 flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 transition-colors group-hover:bg-primary/15">
+                    <feature.icon className="h-5 w-5 text-primary" />
+                  </div>
+                  <h3 className="aie-layer-mid mb-2 flex items-center gap-1.5 text-sm font-bold">
+                    {feature.title}
+                    <ArrowUpRight className="h-3.5 w-3.5 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
+                  </h3>
+                  <p className="text-xs leading-relaxed text-muted-foreground">{feature.description}</p>
+                </TiltCard>
+              </div>
             ))}
           </ScrollReveal>
         </div>
@@ -419,7 +523,7 @@ export default function Landing() {
       <section id="how" className="scroll-mt-20 py-16 sm:py-20">
         <div className="mx-auto max-w-6xl px-4 sm:px-6">
           <ScrollReveal className="mb-14 max-w-2xl" delay={0} y={20}>
-            <p className="text-[11px] font-semibold tracking-[0.18em] text-primary uppercase">How it works</p>
+            <Kicker>How it works</Kicker>
             <h2 className="mt-3 text-2xl font-bold tracking-tight sm:text-3xl">
               Three moves from blank page to clear signal
             </h2>
@@ -441,28 +545,32 @@ export default function Landing() {
             <div className="space-y-6">
               {steps.map((step, index) => (
                 <ScrollReveal key={step.title} delay={0} y={30}>
-                  <article className="glass-card relative p-6 sm:p-7">
-                    <div className="flex flex-wrap items-center gap-3">
-                      <span className="flex h-10 w-10 items-center justify-center rounded-xl aie-gradient text-sm font-bold text-white">
-                        {index + 1}
-                      </span>
-                      <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
-                        <step.icon className="h-5 w-5 text-primary" />
-                      </span>
-                      <h3 className="text-base font-bold">{step.title}</h3>
-                    </div>
-                    <p className="mt-4 text-xs leading-relaxed text-muted-foreground sm:text-sm">{step.body}</p>
-                    <ul className="mt-4 flex flex-wrap gap-2">
-                      {step.points.map((point) => (
-                        <li
-                          key={point}
-                          className="rounded-full border border-border/60 bg-muted/40 px-2.5 py-1 text-[11px] text-muted-foreground"
-                        >
-                          {point}
-                        </li>
-                      ))}
-                    </ul>
-                  </article>
+                  {/* The wrapper keeps anime.js' inline transform off the tilt element,
+                      which owns its own transform via CSS custom properties. */}
+                  <div>
+                    <TiltCard className="p-5 sm:p-7" intensity={4} lift={6} interactive={interactive} glow>
+                      <div className="flex flex-wrap items-center gap-3">
+                        <span className="flex h-10 w-10 items-center justify-center rounded-xl aie-gradient text-sm font-bold text-white">
+                          {index + 1}
+                        </span>
+                        <span className="aie-layer-mid flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
+                          <step.icon className="h-5 w-5 text-primary" />
+                        </span>
+                        <h3 className="text-base font-bold">{step.title}</h3>
+                      </div>
+                      <p className="mt-4 text-xs leading-relaxed text-muted-foreground sm:text-sm">{step.body}</p>
+                      <ul className="mt-4 flex flex-wrap gap-2">
+                        {step.points.map((point) => (
+                          <li
+                            key={point}
+                            className="rounded-full border border-border/60 bg-muted/40 px-2.5 py-1 text-[11px] text-muted-foreground"
+                          >
+                            {point}
+                          </li>
+                        ))}
+                      </ul>
+                    </TiltCard>
+                  </div>
                 </ScrollReveal>
               ))}
             </div>
@@ -470,12 +578,14 @@ export default function Landing() {
         </div>
       </section>
 
+      <DepthTransition label="Read the signal" animated={!pointer.reduced} />
+
       {/* ── Intelligence ────────────────────────────────────── */}
       <section id="intelligence" className="scroll-mt-20 py-16 sm:py-20">
         <div className="mx-auto max-w-6xl px-4 sm:px-6">
           <div className="grid items-center gap-10 lg:grid-cols-2 lg:gap-14">
             <ScrollReveal delay={0} y={24}>
-              <p className="text-[11px] font-semibold tracking-[0.18em] text-primary uppercase">AIE Intelligence</p>
+              <Kicker>AIE Intelligence</Kicker>
               <h2 className="mt-3 text-2xl font-bold tracking-tight sm:text-3xl">
                 An engine that reads the same board your team does
               </h2>
@@ -495,13 +605,15 @@ export default function Landing() {
               </ul>
             </ScrollReveal>
 
-            <ScrollReveal delay={140} y={28} scaleFrom={0.97}>
-              <div className="glass-card relative overflow-hidden p-6">
-                <div
-                  aria-hidden="true"
-                  className="absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-primary/10 to-transparent"
-                />
-                <div className="relative">
+            <ScrollReveal delay={140} y={28}>
+              <div>
+                <TiltCard className="p-5 sm:p-6" intensity={5} lift={8} interactive={interactive} cursorLabel="Inspect">
+                  <div
+                    aria-hidden="true"
+                    className="absolute inset-x-0 top-0 h-24 overflow-hidden bg-gradient-to-b from-primary/10 to-transparent"
+                    style={{ borderRadius: "inherit" }}
+                  />
+                  <div className="aie-layer-near">
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex items-center gap-2">
                       <span className="flex h-8 w-8 items-center justify-center rounded-lg aie-gradient">
@@ -512,7 +624,10 @@ export default function Landing() {
                         <p className="text-[10px] text-muted-foreground">Generated from your board</p>
                       </div>
                     </div>
-                    <Badge variant="outline" className="rounded-full border-primary/30 bg-primary/10 text-[10px] text-primary">
+                    <Badge
+                      variant="outline"
+                      className="rounded-full border-primary/30 bg-primary/10 text-[10px] text-primary"
+                    >
                       Example
                     </Badge>
                   </div>
@@ -537,15 +652,16 @@ export default function Landing() {
                       <Clock className="h-3 w-3" /> Tracked risks
                     </p>
                     <div className="space-y-2">
-                      {insightSample.risks.map((risk) => (
-                        <div key={risk.label} className="flex items-center justify-between gap-3">
-                          <span className="truncate text-[11px]">{risk.label}</span>
-                          <RiskLevel label={risk.level} tone={risk.tone} />
-                        </div>
-                      ))}
+                        {insightSample.risks.map((risk) => (
+                          <div key={risk.label} className="flex items-center justify-between gap-3">
+                            <span className="truncate text-[11px]">{risk.label}</span>
+                            <RiskLevel label={risk.level} tone={risk.tone} />
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   </div>
-                </div>
+                </TiltCard>
               </div>
             </ScrollReveal>
           </div>
@@ -555,14 +671,20 @@ export default function Landing() {
       {/* ── CTA ─────────────────────────────────────────────── */}
       <section id="get-started" className="scroll-mt-20 py-16 sm:py-20">
         <div className="mx-auto max-w-6xl px-4 sm:px-6">
-          <ScrollReveal delay={0} y={26} scaleFrom={0.98}>
-            <div className="glass-card relative overflow-hidden p-8 text-center sm:p-12">
-              <div aria-hidden="true" className="landing-grid absolute inset-0 opacity-60" />
-              <div
-                aria-hidden="true"
-                className="absolute inset-0 bg-gradient-to-br from-primary/10 via-transparent to-transparent"
-              />
-              <div className="relative">
+          <ScrollReveal delay={0} y={26}>
+            <div>
+              <TiltCard className="p-7 text-center sm:p-12" intensity={3} lift={5} interactive={interactive} glow>
+                <div
+                  aria-hidden="true"
+                  className="landing-grid absolute inset-0 opacity-60"
+                  style={{ borderRadius: "inherit" }}
+                />
+                <div
+                  aria-hidden="true"
+                  className="absolute inset-0 bg-gradient-to-br from-primary/10 via-transparent to-transparent"
+                  style={{ borderRadius: "inherit" }}
+                />
+                <div className="aie-layer-mid relative">
                 <div className="aie-glow mx-auto mb-5 flex h-12 w-12 items-center justify-center rounded-2xl aie-gradient">
                   <Zap className="h-6 w-6 text-white" />
                 </div>
@@ -572,14 +694,23 @@ export default function Landing() {
                   engine working in under a minute.
                 </p>
                 <div className="mt-7 flex flex-wrap items-center justify-center gap-3">
-                  <Button size="lg" onClick={goToAuth} className="gap-2 px-8">
-                    Open AIE <ArrowRight className="h-4 w-4" />
-                  </Button>
-                  <Button size="lg" variant="outline" onClick={() => scrollTo("features")} className="px-8">
+                  <MagneticButton enabled={interactive} strength={9}>
+                    <Button size="lg" onClick={goToAuth} data-cursor="hover" className="gap-2 px-8">
+                      Open AIE <ArrowRight className="h-4 w-4" />
+                    </Button>
+                  </MagneticButton>
+                  <Button
+                    size="lg"
+                    variant="outline"
+                    onClick={() => scrollTo("features")}
+                    data-cursor="hover"
+                    className="px-8"
+                  >
                     Browse the features
                   </Button>
+                  </div>
                 </div>
-              </div>
+              </TiltCard>
             </div>
           </ScrollReveal>
         </div>
@@ -608,6 +739,7 @@ export default function Landing() {
                       <button
                         type="button"
                         onClick={() => scrollTo(link.id)}
+                        data-cursor="hover"
                         className="text-xs text-muted-foreground transition-colors hover:text-foreground"
                       >
                         {link.label}
@@ -624,6 +756,7 @@ export default function Landing() {
                       <button
                         type="button"
                         onClick={goToAuth}
+                        data-cursor="hover"
                         className="text-xs text-muted-foreground transition-colors hover:text-foreground"
                       >
                         {item}
@@ -639,9 +772,7 @@ export default function Landing() {
 
           <div className="mt-5 flex flex-col items-center justify-between gap-3 sm:flex-row">
             <p className="text-xs text-muted-foreground">© 2026 Agile Intelligence Engine. All rights reserved.</p>
-            <p className="text-xs text-muted-foreground">
-              Built with three.js, anime.js and Framer Motion.
-            </p>
+            <p className="text-xs text-muted-foreground">Built with three.js, anime.js and Framer Motion.</p>
           </div>
         </div>
       </footer>

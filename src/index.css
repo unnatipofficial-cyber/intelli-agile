@@ -506,3 +506,289 @@
     animation: none !important;
   }
 }
+
+/* ════════════════════════════════════════════════════════════════
+   LANDING — smooth scrolling (Lenis)
+   Lenis animates the real scroll offset, so these rules just stop the
+   browser fighting it and keep nested scrollers sane.
+   ════════════════════════════════════════════════════════════════ */
+html.lenis,
+html.lenis body {
+  height: auto;
+}
+
+.lenis.lenis-smooth {
+  scroll-behavior: auto !important;
+}
+
+.lenis.lenis-smooth [data-lenis-prevent] {
+  overscroll-behavior: contain;
+}
+
+.lenis.lenis-stopped {
+  overflow: hidden;
+}
+
+.lenis.lenis-scrolling iframe {
+  pointer-events: none;
+}
+
+/* ════════════════════════════════════════════════════════════════
+   LANDING — custom cursor
+   ════════════════════════════════════════════════════════════════ */
+/* Landing page wrapper.
+   `clip` trims horizontal overflow WITHOUT turning this element into a scroll
+   container, which is what keeps the sticky nav and Lenis' window scrolling
+   working. `hidden` is the fallback for engines without `clip` support; it is
+   dropped at parse time where `clip` is understood. */
+.aie-page {
+  overflow-x: hidden;
+  overflow-x: clip;
+}
+
+/* Hide the native pointer across the whole landing root — the page has no text
+   inputs, and the custom dot tracks 1:1 so aiming stays precise. */
+[data-custom-cursor="true"],
+[data-custom-cursor="true"] * {
+  cursor: none;
+}
+
+.aie-cursor-dot,
+.aie-cursor-ring {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 90;
+  pointer-events: none;
+  will-change: transform, opacity;
+}
+
+.aie-cursor-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 9999px;
+  background: var(--aie-accent);
+  transition: opacity 0.25s ease;
+}
+
+.aie-cursor-ring {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 9999px;
+  border: 1px solid color-mix(in srgb, var(--aie-accent) 45%, transparent);
+  background: color-mix(in srgb, var(--aie-accent) 8%, transparent);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  transition:
+    width 0.3s cubic-bezier(0.22, 1, 0.36, 1),
+    height 0.3s cubic-bezier(0.22, 1, 0.36, 1),
+    background-color 0.3s ease,
+    border-color 0.3s ease,
+    opacity 0.25s ease;
+}
+
+.aie-cursor-ring[data-variant="hover"] {
+  width: 52px;
+  height: 52px;
+  border-color: color-mix(in srgb, var(--aie-accent) 70%, transparent);
+  background: color-mix(in srgb, var(--aie-accent) 14%, transparent);
+}
+
+.aie-cursor-ring[data-variant="label"] {
+  width: 78px;
+  height: 78px;
+  border-color: color-mix(in srgb, var(--aie-accent) 70%, transparent);
+  background: color-mix(in srgb, var(--aie-accent) 18%, transparent);
+}
+
+.aie-cursor-label {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--aie-accent);
+}
+
+/* ════════════════════════════════════════════════════════════════
+   LANDING — interactive 3D cards
+   Tilt + glow + layered depth are driven by CSS custom properties that
+   the component writes on pointermove, so nothing re-renders per frame.
+   ════════════════════════════════════════════════════════════════ */
+.aie-tilt {
+  --nx: 0;
+  --ny: 0;
+  --tilt-max: 5deg;
+  --lift: 0px;
+  position: relative;
+  border-radius: var(--radius-lg);
+  transform:
+    perspective(1100px)
+    rotateX(calc(var(--ny) * -1 * var(--tilt-max)))
+    rotateY(calc(var(--nx) * var(--tilt-max)))
+    translate3d(0, calc(var(--lift) * -1), 0);
+  transition: transform 520ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.aie-tilt[data-tilting="true"] {
+  transition: transform 140ms ease-out;
+}
+
+.aie-tilt-surface {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  background: var(--card);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(16px) saturate(180%);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 4px 16px -4px rgba(0, 0, 0, 0.06);
+  transition: box-shadow 520ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.dark .aie-tilt-surface {
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 4px 16px -4px rgba(0, 0, 0, 0.4);
+}
+
+.aie-tilt[data-tilting="true"] .aie-tilt-surface {
+  box-shadow:
+    0 2px 4px rgba(0, 0, 0, 0.05),
+    0 26px 60px -28px color-mix(in srgb, var(--aie-accent) 55%, transparent),
+    0 8px 24px -12px rgba(0, 0, 0, 0.2);
+}
+
+.aie-tilt-glow {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  opacity: 0;
+  transition: opacity 420ms ease;
+  background: radial-gradient(
+    300px circle at var(--glow-x, 50%) var(--glow-y, 50%),
+    color-mix(in srgb, var(--aie-accent) 22%, transparent),
+    transparent 68%
+  );
+}
+
+.aie-tilt[data-tilting="true"] .aie-tilt-glow {
+  opacity: 1;
+}
+
+/* Content drifts a little; the layer utilities drift further. */
+.aie-tilt-content {
+  position: relative;
+  z-index: 1;
+  height: 100%;
+  transform: translate3d(calc(var(--nx) * -3px), calc(var(--ny) * -3px), 0);
+}
+
+.aie-layer-mid {
+  transform: translate3d(calc(var(--nx) * -6px), calc(var(--ny) * -6px), 0);
+}
+
+.aie-layer-near {
+  transform: translate3d(calc(var(--nx) * -11px), calc(var(--ny) * -11px), 0);
+}
+
+/* ════════════════════════════════════════════════════════════════
+   LANDING — magnetic buttons
+   ════════════════════════════════════════════════════════════════ */
+.aie-magnetic,
+.aie-magnetic-inner {
+  transition: transform 320ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* ════════════════════════════════════════════════════════════════
+   LANDING — section-to-section depth transition
+   ════════════════════════════════════════════════════════════════ */
+.aie-depth-band {
+  position: relative;
+  height: 190px;
+  overflow: hidden;
+  perspective: 1000px;
+}
+
+@media (min-width: 640px) {
+  .aie-depth-band {
+    height: 260px;
+  }
+}
+
+.aie-depth-plane {
+  position: absolute;
+  top: 50%;
+  left: -10%;
+  right: -10%;
+  height: 150%;
+  margin-top: -75%;
+  transform-origin: center;
+  background-image:
+    linear-gradient(to right, color-mix(in srgb, var(--foreground) 10%, transparent) 1px, transparent 1px),
+    linear-gradient(to bottom, color-mix(in srgb, var(--foreground) 10%, transparent) 1px, transparent 1px);
+  background-size: 64px 64px;
+  -webkit-mask-image: radial-gradient(ellipse 60% 55% at 50% 50%, #000 20%, transparent 100%);
+  mask-image: radial-gradient(ellipse 60% 55% at 50% 50%, #000 20%, transparent 100%);
+}
+
+.aie-depth-spine {
+  position: absolute;
+  top: 10%;
+  bottom: 10%;
+  left: 50%;
+  width: 1px;
+  transform-origin: center;
+  background: linear-gradient(to bottom, transparent, var(--aie-accent), transparent);
+}
+
+.aie-depth-label {
+  position: absolute;
+  top: 50%;
+  inset-inline: 0;
+  margin-top: -0.6em;
+  text-align: center;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+}
+
+/* ════════════════════════════════════════════════════════════════
+   LANDING — motion safety
+   Touch and reduced-motion users get the flat, static composition:
+   no tilt, no cursor-following glow, no magnetic pull.
+   ════════════════════════════════════════════════════════════════ */
+@media (hover: none), (pointer: coarse), (prefers-reduced-motion: reduce) {
+  .aie-tilt,
+  .aie-tilt-content,
+  .aie-layer-mid,
+  .aie-layer-near {
+    transform: none !important;
+  }
+
+  .aie-tilt,
+  .aie-tilt[data-tilting="true"],
+  .aie-magnetic,
+  .aie-magnetic-inner {
+    transition: none !important;
+  }
+
+  .aie-tilt-glow {
+    display: none;
+  }
+
+  .aie-cursor-dot,
+  .aie-cursor-ring {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .aie-depth-plane {
+    transform: none !important;
+  }
+}

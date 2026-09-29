@@ -29,6 +29,29 @@ const BASE_ROTATION_Y = 0.35;
 const NODE_COUNT = 18;
 const NODE_RADIUS = 2.15;
 
+/**
+ * Compact and touch devices get fewer nodes, a lower pixel ratio and no MSAA.
+ * The 3D layer must never be the reason a phone stutters.
+ */
+interface SceneQuality {
+  nodes: number;
+  dpr: number;
+  antialias: boolean;
+}
+
+function readQuality(): SceneQuality {
+  if (typeof window === "undefined") {
+    return { nodes: NODE_COUNT, dpr: 1.5, antialias: true };
+  }
+  const coarse = window.matchMedia?.("(pointer: coarse)").matches ?? false;
+  const compact = coarse || window.innerWidth < 768;
+  return {
+    nodes: compact ? 11 : NODE_COUNT,
+    dpr: compact ? 1.25 : 1.6,
+    antialias: !compact,
+  };
+}
+
 /** Evenly distributes `count` points over a sphere of `radius`. */
 function fibonacciSphere(count: number, radius: number): THREE.Vector3[] {
   const points: THREE.Vector3[] = [];
@@ -99,11 +122,13 @@ export default function Hero3DScene({ palette, animated = true }: SceneProps) {
     const hostEl = host.current;
     if (!hostEl) return;
 
+    const quality = readQuality();
+
     let renderer: THREE.WebGLRenderer;
     try {
       renderer = new THREE.WebGLRenderer({
         alpha: true,
-        antialias: true,
+        antialias: quality.antialias,
         powerPreference: "high-performance",
       });
     } catch (error) {
@@ -111,7 +136,7 @@ export default function Hero3DScene({ palette, animated = true }: SceneProps) {
       return;
     }
 
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.6));
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, quality.dpr));
     renderer.setClearAlpha(0);
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.domElement.style.width = "100%";
@@ -184,7 +209,7 @@ export default function Hero3DScene({ palette, animated = true }: SceneProps) {
     root.add(halo);
 
     /* Node constellation + edges */
-    const nodePoints = fibonacciSphere(NODE_COUNT, NODE_RADIUS);
+    const nodePoints = fibonacciSphere(quality.nodes, NODE_RADIUS);
     const edgeGeometry = track(new THREE.BufferGeometry());
     edgeGeometry.setAttribute(
       "position",
@@ -206,7 +231,7 @@ export default function Hero3DScene({ palette, animated = true }: SceneProps) {
     const nodes = new THREE.InstancedMesh(
       track(new THREE.SphereGeometry(0.052, 12, 12)),
       nodeMaterial,
-      NODE_COUNT,
+      nodePoints.length,
     );
     const matrix = new THREE.Matrix4();
     const highlight = new THREE.Color(palette.accentLight);
@@ -271,13 +296,26 @@ export default function Hero3DScene({ palette, animated = true }: SceneProps) {
     let frame = 0;
     let running = false;
 
+    // Cached via a passive listener so the render loop never forces a layout read.
+    let scrollY = window.scrollY;
+    const handleScroll = () => {
+      scrollY = window.scrollY;
+    };
+    window.addEventListener("scroll", handleScroll, { passive: true });
+
     const renderFrame = (delta: number) => {
       if (animatedRef.current) elapsed += delta;
       const t = elapsed;
 
+      // Scroll-linked depth: the assembly recedes and turns as the hero leaves
+      // the viewport, handing off to the content below rather than simply
+      // scrolling out of frame.
+      const depth = Math.min(Math.max(scrollY / (window.innerHeight || 1), 0), 1.2);
+
       // A slight three-quarter pose, nudged by the pointer.
-      root.rotation.y += (BASE_ROTATION_Y + pointer.x * 0.38 - root.rotation.y) * 0.05;
+      root.rotation.y += (BASE_ROTATION_Y + pointer.x * 0.38 + depth * 0.9 - root.rotation.y) * 0.05;
       root.rotation.x += (BASE_ROTATION_X - pointer.y * 0.26 - root.rotation.x) * 0.05;
+      root.position.z = -depth * 2.6;
 
       shell.rotation.y = t * 0.14;
       shell.rotation.z = t * 0.06;
@@ -345,6 +383,7 @@ export default function Hero3DScene({ palette, animated = true }: SceneProps) {
       stop();
       observer?.disconnect();
       window.removeEventListener("resize", handleResize);
+      window.removeEventListener("scroll", handleScroll);
       hostEl.removeEventListener("pointermove", handlePointerMove);
       hostEl.removeEventListener("pointerleave", handlePointerLeave);
       disposables.forEach((resource) => resource.dispose());
@@ -372,7 +411,7 @@ export default function Hero3DScene({ palette, animated = true }: SceneProps) {
 
     const accent = new THREE.Color(palette.accent);
     const highlight = new THREE.Color(palette.accentLight);
-    for (let i = 0; i < NODE_COUNT; i += 1) {
+    for (let i = 0; i < scene.nodes.count; i += 1) {
       const color = i % 4 === 0 ? highlight : accent;
       scene.nodes.setColorAt(i, color);
     }
