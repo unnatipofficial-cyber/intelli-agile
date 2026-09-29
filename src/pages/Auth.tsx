@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/input-otp";
 
 import { useAuth } from "@/hooks/use-auth";
+import { useDarkSurface } from "@/hooks/use-theme";
 import logo from "@/assets/logo.svg";
 import { ArrowRight, Loader2, Mail, UserX } from "lucide-react";
 import { Suspense, useEffect, useState } from "react";
@@ -296,6 +297,9 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
 }
 
 export default function AuthPage(props: AuthProps) {
+  // Sign-in is dark-only across every appearance theme, matching the landing page.
+  useDarkSurface();
+
   return (
     <Suspense>
       <Auth {...props} />

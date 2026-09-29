@@ -29,6 +29,7 @@ import { CustomCursor } from "@/components/landing/CustomCursor";
 import { DepthTransition } from "@/components/landing/DepthTransition";
 import { MagneticButton } from "@/components/landing/MagneticButton";
 import { ScrollProgressBar } from "@/components/landing/ScrollProgressBar";
+import { SpaceBackdrop } from "@/components/landing/SpaceBackdrop";
 import { ScrollReveal } from "@/components/landing/ScrollReveal";
 import { TiltCard } from "@/components/landing/TiltCard";
 import { Badge } from "@/components/ui/badge";
@@ -36,13 +37,29 @@ import { Button } from "@/components/ui/button";
 import { usePointerMode } from "@/hooks/use-pointer-mode";
 import { useScrollSpine } from "@/hooks/use-scroll-spine";
 import { useSmoothScroll } from "@/hooks/use-smooth-scroll";
+import { useDarkSurface, useTheme } from "@/hooks/use-theme";
 import { useThemePalette } from "@/hooks/use-theme-palette";
+import type { AppTheme } from "@/hooks/use-theme";
+import type { HeroSubject } from "@/components/landing/Hero3DScene";
 import { supportsWebGL } from "@/lib/motion-prefs";
 
 /** three.js only loads when a WebGL context is actually available. */
 const Hero3DScene = lazy(() => import("@/components/landing/Hero3DScene"));
 
 const AUTH_ROUTE = "/auth/ui";
+
+/** Every appearance theme gets its own subject in the hero. */
+const SUBJECT_BY_THEME: Record<AppTheme, HeroSubject> = {
+  graphite: "earth",
+  "modern-minimal": "blackhole",
+  darkmatter: "sun",
+};
+
+const SUBJECT_CAPTION: Record<HeroSubject, string> = {
+  earth: "Graphite · Earth and satellite",
+  blackhole: "Modern Minimal · Black hole",
+  sun: "Darkmatter · Sun",
+};
 
 const features = [
   {
@@ -178,15 +195,23 @@ function Kicker({ children }: { children: ReactNode }) {
   );
 }
 
-/** Static CSS ring illustration shown behind — and instead of — the WebGL scene. */
+/**
+ * Static CSS illustration shown behind — and instead of — the WebGL scene:
+ * a dark core, a glowing orbital ring and a soft nebula. It stands in as a
+ * complete hero for browsers without a WebGL context.
+ */
 function HeroBackdrop() {
   return (
     <div aria-hidden="true" className="pointer-events-none absolute inset-0 flex items-center justify-center">
-      <div className="absolute h-[78%] w-[78%] rounded-full bg-primary/10 blur-3xl" />
+      <div className="absolute h-[74%] w-[74%] rounded-full bg-primary/15 blur-3xl" />
       <div className="absolute h-[86%] w-[86%] rounded-full border border-border/20" />
-      <div className="absolute h-[66%] w-[66%] rounded-full border border-border/30" />
-      <div className="absolute h-[46%] w-[46%] rounded-full border border-border/40" />
-      <div className="absolute h-[46%] w-[46%] rounded-full aie-gradient opacity-[0.07] blur-2xl" />
+      <div
+        className="absolute h-[58%] w-[58%] rounded-full border border-primary/25"
+        style={{ transform: "rotateX(72deg)" }}
+      />
+      <div className="absolute h-[46%] w-[46%] rounded-full border border-border/30" />
+      <div className="absolute h-[38%] w-[38%] rounded-full bg-black/70 blur-[2px]" />
+      <div className="absolute h-[40%] w-[40%] rounded-full border border-primary/40 aie-glow" />
     </div>
   );
 }
@@ -203,8 +228,15 @@ function RiskLevel({ label, tone }: { label: string; tone: "destructive" | "defa
 export default function Landing() {
   const navigate = useNavigate();
   const palette = useThemePalette();
+  const { appTheme } = useTheme();
   const pointer = usePointerMode();
   const { scrollTo } = useSmoothScroll();
+
+  // The landing page is dark-only in every appearance theme; the light/dark
+  // preference still applies everywhere else in the app.
+  useDarkSurface();
+
+  const subject = SUBJECT_BY_THEME[appTheme] ?? "earth";
   const heroRef = useRef<HTMLElement>(null);
   const spine = useScrollSpine<HTMLDivElement>();
 
@@ -226,7 +258,12 @@ export default function Landing() {
   const goToAuth = useCallback(() => navigate(AUTH_ROUTE), [navigate]);
 
   return (
-    <div className="aie-page min-h-screen" data-custom-cursor={interactive ? "true" : undefined}>
+    <>
+      {/* Fixed sky behind the whole page. It lives outside the page wrapper so
+          no ancestor overflow rule can clip it. */}
+      <SpaceBackdrop accent={palette.accent} glow={palette.glow} animated={!pointer.reduced} />
+
+      <div className="aie-page min-h-screen" data-custom-cursor={interactive ? "true" : undefined}>
       <CustomCursor enabled={interactive} />
       <ScrollProgressBar />
 
@@ -277,7 +314,6 @@ export default function Landing() {
 
       {/* ── Hero ────────────────────────────────────────────── */}
       <section id="top" ref={heroRef} className="relative overflow-hidden">
-        <div aria-hidden="true" className="landing-grid absolute inset-0" />
         <div
           aria-hidden="true"
           className="landing-aurora absolute -left-24 top-10 h-[420px] w-[420px] rounded-full bg-primary/20"
@@ -388,17 +424,25 @@ export default function Landing() {
             style={interactive ? { y: sceneY, scale: sceneScale } : undefined}
             className="relative mx-auto h-[300px] w-full max-w-[520px] sm:h-[420px] lg:h-[540px] lg:max-w-none"
           >
-            <HeroBackdrop />
+            {/* The CSS illustration stands in while three.js loads, and stays as
+                the complete hero for browsers without a WebGL context. */}
             {canRender3D ? (
-              /* Fallbacks are intentionally empty: the CSS backdrop above is
-                 already a complete hero illustration if WebGL is unavailable. */
-              <ErrorBoundary fallback={<div aria-hidden="true" />}>
-                <Suspense fallback={<div aria-hidden="true" />}>
+              <ErrorBoundary fallback={<HeroBackdrop />}>
+                <Suspense fallback={<HeroBackdrop />}>
                   <div className="absolute inset-0">
-                    <Hero3DScene palette={palette} animated={!pointer.reduced} />
+                    <Hero3DScene palette={palette} subject={subject} animated={!pointer.reduced} />
                   </div>
                 </Suspense>
               </ErrorBoundary>
+            ) : (
+              <HeroBackdrop />
+            )}
+
+            {canRender3D ? (
+              /* Tells the visitor the hero follows the appearance theme. */
+              <p className="pointer-events-none absolute inset-x-0 bottom-1 text-center text-[10px] font-semibold tracking-[0.24em] text-muted-foreground uppercase">
+                {SUBJECT_CAPTION[subject]}
+              </p>
             ) : null}
           </motion.div>
         </div>
@@ -776,6 +820,7 @@ export default function Landing() {
           </div>
         </div>
       </footer>
-    </div>
+      </div>
+    </>
   );
 }
