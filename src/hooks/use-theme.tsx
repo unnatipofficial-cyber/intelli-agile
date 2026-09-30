@@ -102,16 +102,14 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
 export function useTheme() {
   return useContext(ThemeContext);
-}
-
-/**
- * Pins the app to the dark surface for as long as the calling page is mounted.
- *
- * Used by the public pages (landing, sign in) which are dark-only in every
- * appearance theme. The user's stored `aie-mode` is never modified, so the
- * dashboard and every other page keep working with light, dark or either
- * appearance theme exactly as before.
- */
+}  /**
+   * Pins the app to the dark surface for as long as the calling page is mounted.
+   *
+   * Used by the public pages (landing, sign in) which are dark-only in every
+   * appearance theme. The user's stored `aie-mode` is never modified, so the
+   * dashboard and every other page keep working with light, dark or either
+   * appearance theme exactly as before.
+   */
 export function useDarkSurface() {
   const { setDarkOnly } = useTheme();
 
@@ -119,4 +117,29 @@ export function useDarkSurface() {
     setDarkOnly(true);
     return () => setDarkOnly(false);
   }, [setDarkOnly]);
+}
+
+/**
+ * Pins the app to the dark **graphite** surface for as long as the calling page
+ * is mounted — the landing page's cinematic Earth sequence is authored against
+ * the graphite palette specifically, so the whole page is always graphite on the
+ * public pages, regardless of whatever the user may have saved on their device.
+ *
+ * The transient pin touches neither the stored `aie-mode` nor the stored
+ * `aie-app-theme`: the dashboard and every other page keep behaving exactly as
+ * before once this page unmounts.
+ */
+export function useGraphiteSurface() {
+  const { setDarkOnly, setAppTheme } = useTheme();
+
+  useEffect(() => {
+    setDarkOnly(true);
+    // Always graphite for the duration of this page (origin === "/" guard is
+    // belt-and-suspenders; the hook is only ever called from the landing page).
+    setAppTheme("graphite");
+    return () => {
+      setDarkOnly(false);
+      setAppTheme("graphite");
+    };
+  }, [setDarkOnly, setAppTheme]);
 }

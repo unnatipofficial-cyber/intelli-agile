@@ -45,16 +45,51 @@ interface SceneProps {
   subject?: HeroSubject;
   /** When false (prefers-reduced-motion) the scene renders a single still frame. */
   animated?: boolean;
-  /** Element anime.js scrubs the subject's roll against — the hero section. */
-  scrollTarget?: RefObject<HTMLElement | null>;
 }
 
-/** Resting pose so the scene reads well even when nothing is animating. */
-const BASE_ROTATION_X = 0.16;
-const BASE_ROTATION_Y = 0.35;
-const CAMERA_Z = 7.2;
-/** Key light direction — also the direction the atmosphere is lit from. */
-const SUN_DIRECTION = new THREE.Vector3(5, 6, 7).normalize();
+/** The camera keyframes that make up the single continuous orbital journey. */
+const CAMERA_KEYFRAMES: Array<{
+  progress: number;
+  position: [number, number, number];
+  rotation: [number, number, number];
+}> = [
+  { progress: 0.00, position: [0, 0.15, 6.2], rotation: [0, 0, 0] },
+  { progress: 0.33, position: [2.4, 0.3, 5.1], rotation: [-0.02, 0.32, 0.04] },
+  { progress: 0.66, position: [3.5, 0.8, 3.7], rotation: [-0.08, 0.72, 0.08] },
+  { progress: 1.00, position: [1.3, 1.7, 4.2], rotation: [-0.35, 0.4, 0.05] },
+];
+
+/**
+ * One subject moves its camera through the four keyframes as the page scrolls.
+ * Graphite Earth is the only subject that uses it — the other themes keep the
+ * old resting pose, so the active change is scoped to the graphite landing page.
+ */
+const IS_EARTH_CAMERA = (subject: HeroSubject) => subject === "earth";
+
+/**
+ * Key-light / Sun orbit. The original formulation was an example; the phases
+ * here are tuned so State 1 is actually daylight on the camera-facing side and
+ * the Sun genuinely sinks below the horizon at the end of the page.
+ */
+function updateSun(progress: number, light: THREE.DirectionalLight): void {
+  // Azimuth sweeps from the camera's side of the planet to the far side;
+  // elevation sinks from just above the terminator to below the horizon, so
+  // the four states come out as DAYLIGHT → NIGHT LIMB → CRESCENT → SUN BELOW
+  // HORIZON along the camera path.
+  const sweep = THREE.MathUtils.lerp(0.12, Math.PI * 1.06, progress);
+  const radius = 7;
+  light.position.set(
+    THREE.MathUtils.sin(sweep) * radius,
+    THREE.MathUtils.lerp(1.4, -3.4, progress) + THREE.MathUtils.sin(sweep * 0.65) * 0.6,
+    THREE.MathUtils.cos(sweep) * radius,
+  );
+}
+
+interface SceneQuality {
+  particles: number;
+  dpr: number;
+  antialias: boolean;
+}
 
 interface SceneQuality {
   /** Multiplier applied to particle and instance counts. */
@@ -454,16 +489,14 @@ const ATMOSPHERE_FRAGMENT = /* glsl */ `
 `;
 
 function buildEarth(palette: ThemePalette, context: BuildContext): SubjectHandle {
-  const { bin, scene } = context;
+  const bin = context.bin;
   const group = new THREE.Group();
   const maps = getEarthMaps();
 
-  /* The subject lights itself: one key light standing in for the Sun. Keeping
-     it scene-level means the day/night terminator stays put while the planet
-     and its parallax rotate underneath it. */
-  const keyLight = new THREE.DirectionalLight(0xffffff, 2.4);
-  keyLight.position.set(5, 6, 7);
-  scene.add(keyLight);
+  /* The host now owns the orbiting Sun (keyLight) for the cinematic journey.
+     The Earth itself carries no scene-level light of its own on the graphite
+     theme — the host updates the Sun every frame from the page's scroll
+     progress, so the day/night terminator genuinely travels across the planet. */
 
   /* Axial tilt group shared by the planet, clouds and atmosphere. */
   const axis = new THREE.Group();
@@ -513,10 +546,10 @@ function buildEarth(palette: ThemePalette, context: BuildContext): SubjectHandle
     bin,
     new THREE.ShaderMaterial({
       uniforms: {
-        uColor: { value: new THREE.Color("#5aa6ff") },
-        uSunDir: { value: SUN_DIRECTION.clone() },
-        uIntensity: { value: 1.45 },
-        uPower: { value: 2.7 },
+        uColor: { value: new THREE.Color("#749cc6") },
+        uSunDir: { value: new THREE.Vector3() },
+        uIntensity: { value: 1.35 },
+        uPower: { value: 3.0 },
       },
       vertexShader: ATMOSPHERE_VERTEX,
       fragmentShader: ATMOSPHERE_FRAGMENT,
