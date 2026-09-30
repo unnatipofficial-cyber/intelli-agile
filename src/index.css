@@ -842,3 +842,184 @@ html.lenis body {
     transform: none !important;
   }
 }
+
+/* ════════════════════════════════════════════════════════════════
+   GRAPHITE — cinematic scroll surface
+   Deep graphite palette plus the scroll-driven layer stack: a warming
+   background that follows the Sun, a letterbox that tightens as the
+   Sun sets, and a nav that darkens on the way down. Everything reads
+   `--scroll-progress` (0 at the top of the page, 1 at the bottom),
+   published by useSmoothScroll.
+   ════════════════════════════════════════════════════════════════ */
+
+:root {
+  --graphite-950: #050607;
+  --graphite-900: #0b0d0f;
+  --graphite-850: #111316;
+  --graphite-800: #16191c;
+  --graphite-700: #1d2124;
+  --graphite-600: #25292d;
+  --graphite-ink: #f1f1ef;
+  --graphite-ink-dim: #a4a8ac;
+  --graphite-ink-faint: #686d72;
+  --graphite-edge: rgba(255, 255, 255, 0.08);
+  --graphite-edge-strong: rgba(255, 255, 255, 0.14);
+
+  /* Defaults, so the utilities below work before the first scroll frame. */
+  --scroll-progress: 0;
+  --scroll-y: 0;
+}
+
+/* The page surface. The background warms very slightly as the Sun drops —
+   from cold graphite toward a warmer charcoal — which is what ties the copy
+   to the planet behind it. */
+.aie-cinema-surface {
+  position: relative;
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--graphite-950) calc(100% - var(--scroll-progress) * 34%), #0a0906)
+        0%,
+      var(--graphite-950) 100%
+    ),
+    var(--graphite-950);
+  isolation: isolate;
+}
+
+/* Letterbox. Closed (invisible) in daylight, tight at the bottom of the page
+   when the Sun is below the horizon. Purely decorative and pointer-transparent. */
+.aie-letterbox {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  pointer-events: none;
+  opacity: calc(var(--scroll-progress) * 0.9);
+  transition: opacity 240ms linear;
+}
+
+.aie-letterbox::before,
+.aie-letterbox::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: calc(9vh + var(--scroll-progress) * 9vh);
+  background: linear-gradient(180deg, var(--graphite-950) 0%, transparent 100%);
+}
+
+.aie-letterbox::before {
+  top: 0;
+}
+
+.aie-letterbox::after {
+  bottom: 0;
+  background: linear-gradient(0deg, var(--graphite-950) 0%, transparent 100%);
+}
+
+/* A soft corner vignette that deepens with the letterbox. */
+.aie-cinema-vignette {
+  position: fixed;
+  inset: 0;
+  z-index: 39;
+  pointer-events: none;
+  background: radial-gradient(
+    118% 84% at 50% 46%,
+    transparent 40%,
+    rgba(5, 6, 7, calc(0.25 + var(--scroll-progress) * 0.45)) 100%
+  );
+}
+
+/* Nav: translucent and light at the top of the page, frosted and opaque once
+   the hero starts leaving. One custom property drives the whole transition. */
+.aie-nav-scrim {
+  background: color-mix(
+    in srgb,
+    var(--graphite-950) calc(38% + var(--scroll-progress) * 52%),
+    transparent
+  );
+  border-bottom-color: color-mix(
+    in srgb,
+    var(--graphite-edge) calc(30% + var(--scroll-progress) * 70%),
+    transparent
+  );
+  backdrop-filter: blur(calc(6px + var(--scroll-progress) * 10px)) saturate(120%);
+  -webkit-backdrop-filter: blur(calc(6px + var(--scroll-progress) * 10px)) saturate(120%);
+  transition: none;
+}
+
+/* The four camera states, revealed by scroll position. Exactly one is opaque
+   at a time; the crossfade width is narrow so they read as a sequence rather
+   than a dissolve. */
+.aie-state-label {
+  position: absolute;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.6875rem;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  color: var(--graphite-ink-dim);
+  pointer-events: none;
+  opacity: 0;
+  will-change: opacity, transform;
+}
+
+.aie-state-label::before {
+  content: "";
+  width: 1.75rem;
+  height: 1px;
+  background: currentColor;
+  opacity: 0.5;
+}
+
+/* Each label owns a slice of the scroll range centred on its keyframe. */
+.aie-state-1 { --from: 0; --to: 0.14; }
+.aie-state-2 { --from: 0.22; --to: 0.42; }
+.aie-state-3 { --from: 0.56; --to: 0.76; }
+.aie-state-4 { --from: 0.88; --to: 1.02; }
+
+.aie-state-label {
+  opacity: clamp(
+    0,
+    calc(
+      (var(--scroll-progress) - var(--from)) * 12 *
+        (var(--to) - var(--scroll-progress) - 0.02) * 12
+    ),
+    1
+  );
+  transform: translateY(calc((1 - var(--scroll-progress)) * 6px));
+}
+
+/* Panels read as machined graphite: a hairline edge, one soft inner highlight
+   along the top, and no colour. */
+.aie-graphite-panel {
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--graphite-800) 82%, transparent) 0%,
+    color-mix(in srgb, var(--graphite-900) 88%, transparent) 100%
+  );
+  border: 1px solid var(--graphite-edge);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 18px 48px -28px rgba(0, 0, 0, 0.9);
+}
+
+.aie-graphite-rule {
+  height: 1px;
+  border: 0;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--graphite-edge-strong) 18%,
+    var(--graphite-edge-strong) 82%,
+    transparent
+  );
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .aie-letterbox,
+  .aie-state-label {
+    transition: none;
+  }
+}

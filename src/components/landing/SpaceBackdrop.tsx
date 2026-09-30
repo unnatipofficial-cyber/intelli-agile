@@ -92,6 +92,7 @@ export function SpaceBackdrop({ accent, glow, animated = true }: SpaceBackdropPr
 
     let width = 0;
     let height = 0;
+    let docHeight = 0;
     let stars: Star[] = [];
     const shooters: Shooter[] = [];
 
@@ -116,6 +117,9 @@ export function SpaceBackdrop({ accent, glow, animated = true }: SpaceBackdropPr
     const resize = () => {
       width = Math.max(window.innerWidth, 1);
       height = Math.max(window.innerHeight, 1);
+      // Cached so the render loop can work out scroll progress without ever
+      // touching documentElement.scrollHeight (a forced layout) per frame.
+      docHeight = document.documentElement.scrollHeight;
       canvas.width = Math.round(width * dpr);
       canvas.height = Math.round(height * dpr);
       canvas.style.width = `${width}px`;
@@ -143,13 +147,16 @@ export function SpaceBackdrop({ accent, glow, animated = true }: SpaceBackdropPr
       });
     };
 
-    const paintStar = (star: Star, time: number, scrollY: number, boost: number) => {
+    const paintStar = (star: Star, time: number, scrollY: number, boost: number, visibility: number) => {
       // The canvas is fixed, so the field drifts against the content as it scrolls.
       const drift = (((scrollY * star.depth * 0.05) % height) + height) % height;
       const x = star.x;
       const y = (((star.y - drift) % height) + height) % height;
       const twinkle = animatedRef.current ? 0.62 + 0.38 * Math.sin(time * star.speed + star.phase) : 0.85;
-      const alpha = star.alpha * twinkle;
+      // Daylight washes the sky out and only a few stars survive; the deeper
+      // the visitor scrolls — the further the Sun has set — the more the sky
+      // fills in. Matches the 3D star field, which ramps on the same curve.
+      const alpha = star.alpha * twinkle * visibility;
       if (alpha <= 0.01) return;
 
       const streak = boost * star.depth * 16;
@@ -210,13 +217,19 @@ export function SpaceBackdrop({ accent, glow, animated = true }: SpaceBackdropPr
     };
 
     const paintSky = (time: number, dt: number, scrollY: number, boost: number) => {
+      // Same 0.15 → 1 ramp the 3D scene uses, driven by page scroll position.
+      const max = (docHeight || 0) - height;
+      const visibility = 0.15 + (max > 0 ? Math.min(Math.max(scrollY / max, 0), 1) : 0) * 0.85;
+
       context.setTransform(dpr, 0, 0, dpr, 0, 0);
       context.clearRect(0, 0, width, height);
       context.globalCompositeOperation = "lighter";
       context.fillStyle = "rgba(255, 255, 255, 1)";
       context.strokeStyle = "rgba(255, 255, 255, 1)";
 
-      for (let i = 0; i < stars.length; i += 1) paintStar(stars[i], time, scrollY, boost);
+      for (let i = 0; i < stars.length; i += 1) {
+        paintStar(stars[i], time, scrollY, boost, visibility);
+      }
 
       for (let i = shooters.length - 1; i >= 0; i -= 1) {
         const shooter = shooters[i];

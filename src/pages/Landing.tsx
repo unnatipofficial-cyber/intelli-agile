@@ -37,9 +37,8 @@ import { Button } from "@/components/ui/button";
 import { usePointerMode } from "@/hooks/use-pointer-mode";
 import { useScrollSpine } from "@/hooks/use-scroll-spine";
 import { useSmoothScroll } from "@/hooks/use-smooth-scroll";
-import { useDarkSurface, useTheme } from "@/hooks/use-theme";
+import { useGraphiteSurface } from "@/hooks/use-theme";
 import { useThemePalette } from "@/hooks/use-theme-palette";
-import type { AppTheme } from "@/hooks/use-theme";
 import type { HeroSubject } from "@/components/landing/Hero3DScene";
 import { supportsWebGL } from "@/lib/motion-prefs";
 
@@ -48,12 +47,17 @@ const Hero3DScene = lazy(() => import("@/components/landing/Hero3DScene"));
 
 const AUTH_ROUTE = "/auth/ui";
 
-/** Every appearance theme gets its own subject in the hero. */
-const SUBJECT_BY_THEME: Record<AppTheme, HeroSubject> = {
-  graphite: "earth",
-  "modern-minimal": "blackhole",
-  darkmatter: "solar",
-};
+/**
+ * The four states the camera passes through as the page scrolls. The labels
+ * are pure chrome — they reveal themselves from `--scroll-progress`, so they
+ * cost no JavaScript and stay perfectly in step with the 3D scene.
+ */
+const SCENE_STATES = [
+  { className: "aie-state-1", label: "01 / Daylight" },
+  { className: "aie-state-2", label: "02 / Night limb" },
+  { className: "aie-state-3", label: "03 / Crescent" },
+  { className: "aie-state-4", label: "04 / Sun below horizon" },
+] as const;
 
 const SUBJECT_CAPTION: Record<HeroSubject, string> = {
   earth: "Graphite · Earth and satellite",
@@ -228,15 +232,16 @@ function RiskLevel({ label, tone }: { label: string; tone: "destructive" | "defa
 export default function Landing() {
   const navigate = useNavigate();
   const palette = useThemePalette();
-  const { appTheme } = useTheme();
   const pointer = usePointerMode();
   const { scrollTo } = useSmoothScroll();
 
-  // The landing page is dark-only in every appearance theme; the light/dark
-  // preference still applies everywhere else in the app.
-  useDarkSurface();
+  // The landing page is pinned to the graphite surface in both directions; the
+  // light/dark preference still applies everywhere else in the app.
+  useGraphiteSurface();
 
-  const subject = SUBJECT_BY_THEME[appTheme] ?? "earth";
+  // One continuous Earth journey, so the hero subject is fixed rather than
+  // swapped per appearance theme.
+  const subject: HeroSubject = "earth";
   const heroRef = useRef<HTMLElement>(null);
   const spine = useScrollSpine<HTMLDivElement>();
 
@@ -263,12 +268,21 @@ export default function Landing() {
           no ancestor overflow rule can clip it. */}
       <SpaceBackdrop accent={palette.accent} glow={palette.glow} animated={!pointer.reduced} />
 
-      <div className="aie-page min-h-screen" data-custom-cursor={interactive ? "true" : undefined}>
+      <div
+        className="aie-page aie-cinema-surface min-h-screen"
+        data-custom-cursor={interactive ? "true" : undefined}
+      >
       <CustomCursor enabled={interactive} />
       <ScrollProgressBar />
 
+      {/* Cinematic framing. Both are fixed, decorative and pointer-transparent:
+          the vignette deepens with the planet's shadow and the letterbox closes
+          in as the Sun drops below the horizon. */}
+      <div className="aie-cinema-vignette" aria-hidden="true" />
+      <div className="aie-letterbox" aria-hidden="true" />
+
       {/* ── Nav ─────────────────────────────────────────────── */}
-      <nav className="glass-topbar sticky top-0 z-50">
+      <nav className="glass-topbar aie-nav-scrim sticky top-0 z-50">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
           <button
             type="button"
@@ -314,6 +328,19 @@ export default function Landing() {
 
       {/* ── Hero ────────────────────────────────────────────── */}
       <section id="top" ref={heroRef} className="relative overflow-hidden">
+        {/* State readout. Opacity comes straight from --scroll-progress, so each
+            label surfaces exactly as the camera reaches its keyframe. */}
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute top-24 left-4 z-10 hidden flex-col items-start gap-3 sm:top-28 sm:left-6 lg:flex"
+        >
+          {SCENE_STATES.map((state) => (
+            <span key={state.label} className={`aie-state-label ${state.className}`}>
+              {state.label}
+            </span>
+          ))}
+        </div>
+
         <div
           aria-hidden="true"
           className="landing-aurora absolute -left-24 top-10 h-[420px] w-[420px] rounded-full bg-primary/20"

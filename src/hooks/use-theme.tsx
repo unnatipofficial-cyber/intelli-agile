@@ -130,16 +130,22 @@ export function useDarkSurface() {
  * before once this page unmounts.
  */
 export function useGraphiteSurface() {
-  const { setDarkOnly, setAppTheme } = useTheme();
+  const { appTheme, setDarkOnly, setAppTheme } = useTheme();
 
   useEffect(() => {
+    // Captured on mount so the visitor's own appearance theme survives the
+    // landing page instead of being flattened to graphite for good.
+    const restoreTo = appTheme;
     setDarkOnly(true);
     // Always graphite for the duration of this page (origin === "/" guard is
     // belt-and-suspenders; the hook is only ever called from the landing page).
     setAppTheme("graphite");
     return () => {
       setDarkOnly(false);
-      setAppTheme("graphite");
+      setAppTheme(restoreTo);
     };
+    // appTheme is deliberately not a dependency: it is the value to restore,
+    // read once when the page mounts.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [setDarkOnly, setAppTheme]);
 }

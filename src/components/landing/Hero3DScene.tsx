@@ -45,6 +45,12 @@ interface SceneProps {
   subject?: HeroSubject;
   /** When false (prefers-reduced-motion) the scene renders a single still frame. */
   animated?: boolean;
+  /**
+   * Element whose scroll span drives the entrance. The cinematic camera
+   * journey is driven by full-page progress, so this is only used as the
+   * anime.js ScrollObserver target for the subject's entrance roll.
+   */
+  scrollTarget?: RefObject<HTMLElement | null>;
 }
 
 /** The camera keyframes that make up the single continuous orbital journey. */
@@ -67,28 +73,32 @@ const CAMERA_KEYFRAMES: Array<{
 const IS_EARTH_CAMERA = (subject: HeroSubject) => subject === "earth";
 
 /**
- * Key-light / Sun orbit. The original formulation was an example; the phases
- * here are tuned so State 1 is actually daylight on the camera-facing side and
- * the Sun genuinely sinks below the horizon at the end of the page.
+ * Key-light / Sun orbit — one continuous arc, no resets.
+ *
+ * The Sun rides a single sweep so the four states fall out of the geometry
+ * rather than being faked:
+ *   progress 0.0  the Sun sits slightly toward the camera, so the whole
+ *                 visible disc is lit                     → DAYLIGHT
+ *   progress 0.33 the Sun is in the screen plane, terminator across the disc
+ *                                                     → NIGHT LIMB
+ *   progress 0.66 the Sun has swung past, leaving a thin lit crescent
+ *                                                          → CRESCENT
+ *   progress 1.0  the Sun is behind and below the planet's far side
+ *                                           → SUN BELOW HORIZON
  */
 function updateSun(progress: number, light: THREE.DirectionalLight): void {
-  // Azimuth sweeps from the camera's side of the planet to the far side;
-  // elevation sinks from just above the terminator to below the horizon, so
-  // the four states come out as DAYLIGHT → NIGHT LIMB → CRESCENT → SUN BELOW
-  // HORIZON along the camera path.
-  const sweep = THREE.MathUtils.lerp(0.12, Math.PI * 1.06, progress);
+  // Azimuth is measured in the screen plane, from the planet's right limb
+  // round to behind its far lower-left side.
+  const theta = THREE.MathUtils.lerp(0.35, Math.PI * 1.25, progress);
   const radius = 7;
+  // The toward-the-camera bias is what turns a fully lit disc into a half
+  // lit one. It fades out inside the first third of the page.
+  const front = 1 - THREE.MathUtils.smoothstep(progress, 0, 0.32);
   light.position.set(
-    THREE.MathUtils.sin(sweep) * radius,
-    THREE.MathUtils.lerp(1.4, -3.4, progress) + THREE.MathUtils.sin(sweep * 0.65) * 0.6,
-    THREE.MathUtils.cos(sweep) * radius,
+    Math.cos(theta) * radius,
+    Math.sin(theta) * radius,
+    radius * 0.62 * front,
   );
-}
-
-interface SceneQuality {
-  particles: number;
-  dpr: number;
-  antialias: boolean;
 }
 
 interface SceneQuality {
@@ -96,6 +106,24 @@ interface SceneQuality {
   particles: number;
   dpr: number;
   antialias: boolean;
+}
+
+/**
+ * Per-frame values shared between the scene host and whichever subject it
+ * built. Writing them in one place keeps the sun, the atmosphere, the star
+ * field and the planet's city lights all reading the same scroll position.
+ */
+interface FrameState {
+  /** Smoothed full-page scroll progress, 0 at the top and 1 at the bottom. */
+  progress: number;
+  /** Seconds since the scene started, frozen when animation is disabled. */
+  time: number;
+  /** World-space unit vector pointing from the planet toward the Sun. */
+  sunDirection: THREE.Vector3;
+  /** 1 where the Sun is above the horizon, 0 once it has set. */
+  daylight: number;
+  /** Radians of extra turn accumulated while the pointer has been idle. */
+  idleSpin: number;
 }
 
 /**
@@ -135,6 +163,12 @@ interface BuildContext {
   quality: SceneQuality;
   bin: Disposables;
   glowTexture: THREE.CanvasTexture;
+  /**
+   * Live values the host writes once per frame, before it calls
+   * `subject.update`. Subjects read them instead of owning a clock, so scroll
+   * position stays the single source of truth for the whole scene.
+   */
+  frame: FrameState;
   /** The subject may add scene-level lights here (they must not inherit the
    *  subject's rotation, or the lighting would swing with the pointer parallax). */
   scene: THREE.Scene;
@@ -503,6 +537,13 @@ function buildEarth(palette: ThemePalette, context: BuildContext): SubjectHandle
   axis.rotation.z = AXIAL_TILT;
   group.add(axis);
 
+  /* City lights only belong on the night side. A stock emissiveMap glows
+     everywhere, so the emissive term is scaled per fragment by how far the
+     surface normal points away from the Sun — the same nightFactor the
+     atmosphere shader uses. The Sun direction arrives in view space, which is
+     the space `transformedNormal` (and therefore `vNightNormal`) lives in. */
+  const earthSunDir = { value: new THREE.Vector3(1, 0, 1) };
+
   const earthMaterial = track(
     bin,
     new THREE.MeshStandardMaterial({
@@ -517,6 +558,33 @@ function buildEarth(palette: ThemePalette, context: BuildContext): SubjectHandle
       emissiveIntensity: 1.15,
     }),
   );
+  earthMaterial.onBeforeCompile = (shader) => {
+    shader.uniforms.uSunDirView = earthSunDir;
+    shader.vertexShader = shader.vertexShader
+      .replace(
+        "#include <common>",
+        "#include <common>\nvarying vec3 vNightNormal;",
+      )
+      .replace(
+        "#include <defaultnormal_vertex>",
+        "#include <defaultnormal_vertex>\n\tvNightNormal = normalize( transformedNormal );",
+      );
+    shader.fragmentShader = shader.fragmentShader
+      .replace(
+        "#include <common>",
+        "#include <common>\nuniform vec3 uSunDirView;\nvarying vec3 vNightNormal;",
+      )
+      .replace(
+        "#include <emissivemap_fragment>",
+        `#include <emissivemap_fragment>
+        float nightFactor = 1.0 - max( dot( normalize( vNightNormal ), normalize( uSunDirView ) ), 0.0 );
+        totalEmissiveRadiance *= smoothstep( 0.12, 0.72, nightFactor ) * 1.9;`,
+      );
+  };
+  // Without this three reuses a program compiled for other standard materials.
+  earthMaterial.customProgramCacheKey = () => "aie-earth-night-lights";
+  // Hands the uniform object back to the render loop, which writes it each frame.
+  earthMaterial.userData.sunDir = earthSunDir;
   const earth = new THREE.Mesh(
     track(bin, new THREE.SphereGeometry(EARTH_RADIUS, 96, 64)),
     earthMaterial,
@@ -665,7 +733,9 @@ function buildEarth(palette: ThemePalette, context: BuildContext): SubjectHandle
   satellite.scale.setScalar(1.7);
   orbit.add(satellite);
 
-  const trailCount = Math.max(14, Math.round(52 * context.quality.particles));
+  /* Phones get a shorter trail: the per-point position writes are the most
+     expensive thing in this subject, so 40 reads the same at that size. */
+  const trailCount = context.quality.particles < 1 ? 40 : Math.max(14, Math.round(52 * context.quality.particles));
   const trailGeometry = track(bin, new THREE.BufferGeometry());
   trailGeometry.setAttribute("position", new THREE.BufferAttribute(new Float32Array(trailCount * 3), 3));
   const trailMaterial = track(
@@ -686,13 +756,28 @@ function buildEarth(palette: ThemePalette, context: BuildContext): SubjectHandle
   let orbitAngle = 0;
 
   const update = (time: number, delta: number, camera: THREE.PerspectiveCamera) => {
-    earth.rotation.y = time * 0.055;
-    clouds.rotation.y = time * 0.075;
+    const { progress, sunDirection, daylight, idleSpin } = context.frame;
 
-    // Keep the atmosphere's day side facing the key light, in view space.
-    atmosphereMaterial.uniforms.uSunDir.value.copy(SUN_DIRECTION).transformDirection(camera.matrixWorldInverse);
+    // Planet and clouds turn with the page, not with the clock: scrolling up
+    // rewinds them exactly. The idle drift below is the only time-based term.
+    earth.rotation.y = progress * 2.6 + idleSpin;
+    clouds.rotation.y = progress * 3.4 + idleSpin * 1.35;
 
-    orbitAngle += delta * 0.45;
+    // The Sun direction, carried into view space for both the atmosphere rim
+    // and the city-light gate.
+    const sunView = atmosphereMaterial.uniforms.uSunDir.value as THREE.Vector3;
+    sunView.copy(sunDirection).transformDirection(camera.matrixWorldInverse);
+    (earthMaterial.userData.sunDir as { value: THREE.Vector3 }).value.copy(sunView);
+
+    // The rim burns brightest where the Sun still reaches it, and the whole
+    // shell dims once the Sun is below the horizon.
+    atmosphereMaterial.uniforms.uIntensity.value = 0.55 + daylight * 1.15;
+
+    // City lights resolve as the Sun sets: the emissive gate above is per
+    // fragment, this only lifts the overall level.
+    earthMaterial.emissiveIntensity = 0.35 + (1 - daylight) * 1.5;
+
+    orbitAngle = progress * 3.1 + idleSpin * 0.6;
     satellite.position.set(
       Math.cos(orbitAngle) * ORBIT_RADIUS,
       0,
@@ -967,6 +1052,11 @@ function buildSubject(subject: HeroSubject, palette: ThemePalette, context: Buil
   return buildEarth(palette, context);
 }
 
+/** Resting pose for the non-cinematic subjects (black hole, solar system). */
+const BASE_ROTATION_X = 0.16;
+const BASE_ROTATION_Y = 0.35;
+const CAMERA_Z = 7.2;
+
 interface SceneHandles {
   renderer: THREE.WebGLRenderer;
   scene: THREE.Scene;
@@ -975,7 +1065,89 @@ interface SceneHandles {
   subject: SubjectHandle;
   glowLight: THREE.PointLight;
   rimLight: THREE.PointLight;
+  /** Only the graphite Earth subject gets a real Sun. */
+  sunLight: THREE.DirectionalLight | null;
+  /** Star field behind the Earth, faded up as the Sun goes down. */
+  stars: THREE.Points | null;
+  frame: FrameState;
   disposables: Disposables;
+}
+
+/**
+ * Walks the camera through the keyframes. A smoothstep on the local segment
+ * keeps the velocity continuous, so passing a keyframe is never a snap — and
+ * because it reads the same `progress` the rest of the scene reads, scrolling
+ * up runs the whole journey backwards.
+ */
+function applyCameraPose(camera: THREE.PerspectiveCamera, progress: number): void {
+  let from = CAMERA_KEYFRAMES[0];
+  let to = CAMERA_KEYFRAMES[CAMERA_KEYFRAMES.length - 1];
+
+  for (let i = 0; i < CAMERA_KEYFRAMES.length - 1; i += 1) {
+    const a = CAMERA_KEYFRAMES[i];
+    const b = CAMERA_KEYFRAMES[i + 1];
+    if (progress >= a.progress && progress <= b.progress) {
+      from = a;
+      to = b;
+      break;
+    }
+  }
+
+  const span = Math.max(to.progress - from.progress, 0.0001);
+  const raw = THREE.MathUtils.clamp((progress - from.progress) / span, 0, 1);
+  const t = raw * raw * (3 - 2 * raw);
+
+  camera.position.set(
+    THREE.MathUtils.lerp(from.position[0], to.position[0], t),
+    THREE.MathUtils.lerp(from.position[1], to.position[1], t),
+    THREE.MathUtils.lerp(from.position[2], to.position[2], t),
+  );
+  camera.rotation.set(
+    THREE.MathUtils.lerp(from.rotation[0], to.rotation[0], t),
+    THREE.MathUtils.lerp(from.rotation[1], to.rotation[1], t),
+    THREE.MathUtils.lerp(from.rotation[2], to.rotation[2], t),
+  );
+}
+
+/**
+ * A sparse shell of stars behind the Earth. Deliberately tiny and dim: the
+ * point is depth behind the planet, not a skybox. Count scales with the
+ * quality tier so phones are not asked for a thousand extra points.
+ */
+function buildStarField(context: BuildContext): { points: THREE.Points; material: THREE.PointsMaterial } {
+  const { bin, quality } = context;
+  const count = Math.max(120, Math.round(700 * quality.particles));
+  const positions = new Float32Array(count * 3);
+
+  for (let i = 0; i < count; i += 1) {
+    // Even distribution on the band of the sphere the camera actually sees.
+    const theta = Math.random() * Math.PI * 2;
+    const band = (Math.random() - 0.5) * 0.9;
+    const radius = 22 + Math.random() * 16;
+    positions[i * 3] = Math.cos(theta) * radius;
+    positions[i * 3 + 1] = band * radius * 0.8;
+    positions[i * 3 + 2] = Math.sin(theta) * radius;
+  }
+
+  const geometry = track(bin, new THREE.BufferGeometry());
+  geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+
+  const material = track(
+    bin,
+    new THREE.PointsMaterial({
+      color: new THREE.Color("#dfe6ef"),
+      size: 0.035,
+      sizeAttenuation: true,
+      transparent: true,
+      opacity: 0.15,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    }),
+  );
+
+  const points = new THREE.Points(geometry, material);
+  points.renderOrder = -1;
+  return { points, material };
 }
 
 export default function Hero3DScene({
@@ -1004,6 +1176,9 @@ export default function Hero3DScene({
 
     const quality = readQuality();
     const currentPalette = paletteRef.current;
+    /* Only the graphite Earth runs the cinematic four-state journey. The other
+       subjects keep the old resting pose, so this change stays scoped. */
+    const cinematic = IS_EARTH_CAMERA(subject);
 
     let renderer: THREE.WebGLRenderer;
     try {
@@ -1027,20 +1202,38 @@ export default function Hero3DScene({
 
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 100);
-    camera.position.set(0, 0, CAMERA_Z);
+    camera.position.set(
+      0,
+      cinematic ? CAMERA_KEYFRAMES[0].position[1] : 0,
+      cinematic ? CAMERA_KEYFRAMES[0].position[2] : CAMERA_Z,
+    );
 
     const disposables: Disposables = [];
     const glowTexture = getGlowTexture();
 
+    /* Written every frame by the render loop, read by the subject and the
+       atmosphere shader. Scroll position is the only clock that matters. */
+    const frame: FrameState = {
+      progress: 0,
+      time: 0,
+      sunDirection: new THREE.Vector3(1, 0, 1).normalize(),
+      daylight: 1,
+      idleSpin: 0,
+    };
+
     const root = new THREE.Group();
-    root.rotation.set(BASE_ROTATION_X, BASE_ROTATION_Y, 0);
+    root.rotation.set(
+      cinematic ? 0 : BASE_ROTATION_X,
+      cinematic ? 0 : BASE_ROTATION_Y,
+      0,
+    );
     scene.add(root);
 
     /* Lights (three r155+ uses physically-correct units).
        Kept deliberately low: each subject lights itself — the Sun is the solar
        system's light source and the Earth's night side must stay dark for its
        city lights to read. These two only add a coloured rim. */
-    scene.add(new THREE.AmbientLight(0xffffff, 0.3));
+    scene.add(new THREE.AmbientLight(0xffffff, cinematic ? 0.06 : 0.3));
     const glowLight = new THREE.PointLight(new THREE.Color(currentPalette.glow), 20);
     glowLight.position.set(-6, -4, -5);
     scene.add(glowLight);
@@ -1048,11 +1241,27 @@ export default function Hero3DScene({
     rimLight.position.set(4, -5, 3);
     scene.add(rimLight);
 
+    /* The Sun. Added to the scene rather than to the subject root, so the
+       terminator stays put while the planet turns beneath it. */
+    let sunLight: THREE.DirectionalLight | null = null;
+    let stars: THREE.Points | null = null;
+    if (cinematic) {
+      sunLight = new THREE.DirectionalLight(0xfff4e6, 2.6);
+      sunLight.position.set(6, 1.4, 4);
+      scene.add(sunLight);
+      scene.add(sunLight.target);
+
+      const starField = buildStarField({ quality, bin: disposables, glowTexture, scene, frame });
+      scene.add(starField.points);
+      stars = starField.points;
+    }
+
     const subjectHandle = buildSubject(subject, currentPalette, {
       quality,
       bin: disposables,
       glowTexture,
       scene,
+      frame,
     });
     root.add(subjectHandle.group);
 
@@ -1064,6 +1273,9 @@ export default function Hero3DScene({
       subject: subjectHandle,
       glowLight,
       rimLight,
+      sunLight,
+      stars,
+      frame,
       disposables,
     };
 
@@ -1109,17 +1321,24 @@ export default function Hero3DScene({
       }
     }
 
-    /* ── Pointer parallax ───────────────────────────────────── */
+    /* ── Pointer parallax + idle drift ───────────────────────── */
     const pointer = { x: 0, y: 0 };
+    // Seconds since the pointer last moved. Drives the slow idle spin so the
+    // hero never looks frozen when nobody is touching it.
+    let idleFor = 0;
+    let idleSpin = 0;
+    const IDLE_AFTER = 2;
     const handlePointerMove = (event: PointerEvent) => {
       const rect = hostEl.getBoundingClientRect();
       if (rect.width === 0 || rect.height === 0) return;
       pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
       pointer.y = ((event.clientY - rect.top) / rect.height) * 2 - 1;
+      idleFor = 0;
     };
     const handlePointerLeave = () => {
       pointer.x = 0;
       pointer.y = 0;
+      idleFor = IDLE_AFTER;
     };
     hostEl.addEventListener("pointermove", handlePointerMove);
     hostEl.addEventListener("pointerleave", handlePointerLeave);
@@ -1127,31 +1346,83 @@ export default function Hero3DScene({
     /* ── Render loop ────────────────────────────────────────── */
     const clock = new THREE.Clock();
     let elapsed = 0;
-    let frame = 0;
+    let frameId = 0;
     let running = false;
     let fitScale = 1;
 
     // Cached via a passive listener so the loop never forces a layout read.
     let scrollY = window.scrollY;
+    let docHeight = document.documentElement.scrollHeight;
     const handleScroll = () => {
       scrollY = window.scrollY;
     };
+    const handleMeasure = () => {
+      docHeight = document.documentElement.scrollHeight;
+    };
     window.addEventListener("scroll", handleScroll, { passive: true });
+    window.addEventListener("resize", handleMeasure, { passive: true });
+
+    /** Full-page scroll progress, 0 at the top and 1 at the bottom. */
+    const readProgress = () => {
+      const max = (docHeight || 0) - (window.innerHeight || 0);
+      if (max <= 0) return 0;
+      return THREE.MathUtils.clamp(scrollY / max, 0, 1);
+    };
 
     const renderFrame = (delta: number) => {
       if (animatedRef.current) elapsed += delta;
       const t = elapsed;
+      idleFor += delta;
 
-      // Scroll-linked depth: the subject recedes as the hero leaves the
-      // viewport, handing off to the content below rather than scrolling away.
-      const depth = Math.min(Math.max(scrollY / (window.innerHeight || 1), 0), 1.2);
+      // ── The one source of truth: where the page is scrolled to.
+      // Smoothed so a wheel flick glides into the next state rather than
+      // snapping, but never detached from scroll — scrolling up reverses it.
+      const targetProgress = readProgress();
+      frame.progress += (targetProgress - frame.progress) * (animatedRef.current ? 0.12 : 1);
+      frame.time = t;
+      const progress = frame.progress;
 
-      root.rotation.y += (BASE_ROTATION_Y + pointer.x * 0.38 + depth * 0.9 - root.rotation.y) * 0.05;
-      root.rotation.x += (BASE_ROTATION_X - pointer.y * 0.26 - root.rotation.x) * 0.05;
-      // anime.js supplies the entrance roll and the scroll-linked roll.
-      root.rotation.z = entry.roll + sweep.value * 0.45;
-      root.scale.setScalar(fitScale * entry.scale);
-      root.position.z = -depth * 2.6;
+      if (cinematic) {
+        /* State 1 → 4 all fall out of these two calls. */
+        applyCameraPose(camera, progress);
+        if (sunLight) {
+          updateSun(progress, sunLight);
+          frame.sunDirection.copy(sunLight.position).normalize();
+          // Terminator height, used to fade the city lights and the star field.
+          frame.daylight = THREE.MathUtils.clamp(0.5 + frame.sunDirection.y * 1.4, 0, 1);
+        }
+        if (stars) {
+          const material = stars.material as THREE.PointsMaterial;
+          // Barely there in daylight, full strength once the Sun is down.
+          material.opacity = THREE.MathUtils.lerp(0.15, 0.9, progress);
+        }
+
+        // Idle drift: a slow turn that only starts after the pointer rests.
+        if (animatedRef.current && idleFor > IDLE_AFTER) {
+          idleSpin += delta * 0.045;
+        }
+        frame.idleSpin = idleSpin;
+
+        // Pointer parallax is a light touch here — the camera carries the
+        // motion, so the planet only leans a little.
+        root.rotation.y += (pointer.x * 0.12 - root.rotation.y) * 0.04;
+        root.rotation.x += (-pointer.y * 0.09 - root.rotation.x) * 0.04;
+        root.rotation.z = entry.roll;
+        root.scale.setScalar(fitScale * entry.scale);
+        // Recede as the hero leaves, handing off to the copy below it.
+        const heroDepth = Math.min(Math.max(scrollY / (window.innerHeight || 1), 0), 1.2);
+        root.position.z = -heroDepth * 1.4;
+      } else {
+        // Scroll-linked depth for the non-cinematic subjects.
+        const depth = Math.min(Math.max(scrollY / (window.innerHeight || 1), 0), 1.2);
+
+        root.rotation.y += (BASE_ROTATION_Y + pointer.x * 0.38 + depth * 0.9 - root.rotation.y) * 0.05;
+        root.rotation.x += (BASE_ROTATION_X - pointer.y * 0.26 - root.rotation.x) * 0.05;
+        // anime.js supplies the entrance roll and the scroll-linked roll.
+        root.rotation.z = entry.roll + sweep.value * 0.45;
+        root.scale.setScalar(fitScale * entry.scale);
+        root.position.z = -depth * 2.6;
+      }
 
       subjectHandle.update(t, delta, camera);
 
@@ -1159,7 +1430,7 @@ export default function Hero3DScene({
     };
 
     const tick = () => {
-      frame = window.requestAnimationFrame(tick);
+      frameId = window.requestAnimationFrame(tick);
       // Clamp delta so a backgrounded tab cannot jump the animation on return.
       renderFrame(Math.min(clock.getDelta(), 0.05));
     };
@@ -1173,7 +1444,7 @@ export default function Hero3DScene({
 
     const stop = () => {
       running = false;
-      window.cancelAnimationFrame(frame);
+      window.cancelAnimationFrame(frameId);
     };
 
     /* ── Sizing ─────────────────────────────────────────────── */
@@ -1217,6 +1488,7 @@ export default function Hero3DScene({
     document.addEventListener("visibilitychange", sync);
 
     const handleResize = () => {
+      docHeight = document.documentElement.scrollHeight;
       resize();
       if (!(animatedRef.current && inView)) renderFrame(0);
     };
@@ -1229,6 +1501,7 @@ export default function Hero3DScene({
       observer?.disconnect();
       document.removeEventListener("visibilitychange", sync);
       window.removeEventListener("resize", handleResize);
+      window.removeEventListener("resize", handleMeasure);
       window.removeEventListener("scroll", handleScroll);
       hostEl.removeEventListener("pointermove", handlePointerMove);
       hostEl.removeEventListener("pointerleave", handlePointerLeave);
