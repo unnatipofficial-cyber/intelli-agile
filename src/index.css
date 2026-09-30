@@ -795,6 +795,22 @@ html.lenis body {
   background: radial-gradient(125% 88% at 50% 42%, transparent 42%, rgba(0, 0, 0, 0.4) 100%);
 }
 
+/* Warm horizon glow that builds as the page scrolls, sitting between the star
+   canvas and the vignette. `screen` blending means it warms the stars and the
+   nebula instead of painting over them, so the field stays visible the whole
+   way down rather than being washed out by an opaque layer. */
+.space-sunset-tint {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  mix-blend-mode: screen;
+  opacity: calc(var(--scroll-progress) * 0.62);
+  background:
+    radial-gradient(120% 60% at 50% 108%, rgba(122, 78, 38, 0.55) 0%, transparent 62%),
+    radial-gradient(90% 50% at 18% 96%, rgba(64, 52, 40, 0.42) 0%, transparent 68%),
+    linear-gradient(180deg, transparent 52%, rgba(40, 30, 22, 0.5) 100%);
+}
+
 /* The space pages are dark-only, so the glass panels can let a little sky
    through without ever having to survive a light background. */
 .dark .aie-tilt-surface {
@@ -873,17 +889,14 @@ html.lenis body {
 /* The page surface. The background warms very slightly as the Sun drops —
    from cold graphite toward a warmer charcoal — which is what ties the copy
    to the planet behind it. */
+/* The page must NOT paint its own opaque background: SpaceBackdrop is a fixed
+   layer at z-index -1, and any solid background here would bury the star field
+   and the shooting stars completely. The sky stays transparent, and the
+   warming "sunset" tint lives inside the backdrop instead (see
+   .space-sunset-tint), where it can tint the stars rather than cover them. */
 .aie-cinema-surface {
   position: relative;
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--graphite-950) calc(100% - var(--scroll-progress) * 34%), #0a0906)
-        0%,
-      var(--graphite-950) 100%
-    ),
-    var(--graphite-950);
-  isolation: isolate;
+  background: transparent;
 }
 
 /* Letterbox. Closed (invisible) in daylight, tight at the bottom of the page

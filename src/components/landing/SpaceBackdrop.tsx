@@ -153,9 +153,8 @@ export function SpaceBackdrop({ accent, glow, animated = true }: SpaceBackdropPr
       const x = star.x;
       const y = (((star.y - drift) % height) + height) % height;
       const twinkle = animatedRef.current ? 0.62 + 0.38 * Math.sin(time * star.speed + star.phase) : 0.85;
-      // Daylight washes the sky out and only a few stars survive; the deeper
-      // the visitor scrolls — the further the Sun has set — the more the sky
-      // fills in. Matches the 3D star field, which ramps on the same curve.
+      // Daylight thins the sky slightly; scrolling down brightens it as the
+      // Sun sets. Never drops far enough to hide the field.
       const alpha = star.alpha * twinkle * visibility;
       if (alpha <= 0.01) return;
 
@@ -217,9 +216,10 @@ export function SpaceBackdrop({ accent, glow, animated = true }: SpaceBackdropPr
     };
 
     const paintSky = (time: number, dt: number, scrollY: number, boost: number) => {
-      // Same 0.15 → 1 ramp the 3D scene uses, driven by page scroll position.
+      // Gentle 0.55 → 1 ramp driven by page scroll position: the field is
+      // always there, and firms up as the Sun goes down.
       const max = (docHeight || 0) - height;
-      const visibility = 0.15 + (max > 0 ? Math.min(Math.max(scrollY / max, 0), 1) : 0) * 0.85;
+      const visibility = 0.55 + (max > 0 ? Math.min(Math.max(scrollY / max, 0), 1) : 0) * 0.45;
 
       context.setTransform(dpr, 0, 0, dpr, 0, 0);
       context.clearRect(0, 0, width, height);
@@ -314,6 +314,9 @@ export function SpaceBackdrop({ accent, glow, animated = true }: SpaceBackdropPr
     <div aria-hidden="true" className="space-backdrop">
       <div className="space-nebula" />
       <canvas ref={canvasRef} className="space-canvas" />
+      {/* Warm horizon glow that builds with scroll. Screen-blended, so it
+          tints the stars above it rather than covering them. */}
+      <div className="space-sunset-tint" />
       <div className="space-vignette" />
     </div>
   );
