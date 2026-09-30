@@ -47,18 +47,6 @@ const Hero3DScene = lazy(() => import("@/components/landing/Hero3DScene"));
 
 const AUTH_ROUTE = "/auth/ui";
 
-/**
- * The four states the camera passes through as the page scrolls. The labels
- * are pure chrome — they reveal themselves from `--scroll-progress`, so they
- * cost no JavaScript and stay perfectly in step with the 3D scene.
- */
-const SCENE_STATES = [
-  { className: "aie-state-1", label: "01 / Daylight" },
-  { className: "aie-state-2", label: "02 / Night limb" },
-  { className: "aie-state-3", label: "03 / Crescent" },
-  { className: "aie-state-4", label: "04 / Sun below horizon" },
-] as const;
-
 const SUBJECT_CAPTION: Record<HeroSubject, string> = {
   earth: "Graphite · Earth and satellite",
   blackhole: "Modern Minimal · Black hole",
@@ -239,9 +227,8 @@ export default function Landing() {
   // light/dark preference still applies everywhere else in the app.
   useGraphiteSurface();
 
-  // One continuous Earth journey, so the hero subject is fixed rather than
-  // swapped per appearance theme.
-  const subject: HeroSubject = "earth";
+  // The hero subject is fixed rather than swapped per appearance theme.
+  const subject: HeroSubject = "solar";
   const heroRef = useRef<HTMLElement>(null);
   const spine = useScrollSpine<HTMLDivElement>();
 
@@ -328,18 +315,6 @@ export default function Landing() {
 
       {/* ── Hero ────────────────────────────────────────────── */}
       <section id="top" ref={heroRef} className="relative overflow-hidden">
-        {/* State readout. Opacity comes straight from --scroll-progress, so each
-            label surfaces exactly as the camera reaches its keyframe. */}
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute top-24 left-4 z-10 hidden flex-col items-start gap-3 sm:top-28 sm:left-6 lg:flex"
-        >
-          {SCENE_STATES.map((state) => (
-            <span key={state.label} className={`aie-state-label ${state.className}`}>
-              {state.label}
-            </span>
-          ))}
-        </div>
 
         <div
           aria-hidden="true"
