@@ -20,6 +20,8 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 import { api } from "./_generated/api";
 import {
   findFuzzy,
+  findAllFuzzy,
+  normalizeText,
   normEnum,
   parseDateInput,
   describeRelative,
@@ -115,6 +117,114 @@ async function resolveUser(ctx: DbCtx, input?: string): Promise<Resolved> {
     id: user._id,
     name: label(user),
     note: corrected(input, match),
+  };
+}
+
+/**
+ * People queries are frequently plural or categorical ("remove the unknown
+ * members", "who is overloaded"), so a single-winner match is not enough. This
+ * resolves an utterance to every person it plausibly refers to, and recognises
+ * the categories people actually ask for: profile-less placeholders, people
+ * with no open work, and the signed-in user themselves.
+ */
+const GROUP_PATTERNS: { pattern: RegExp; kind: string }[] = [
+  { pattern: /\b(unknown|unnamed|nameless|no name|without a name|placeholder|ghost)\b/, kind: "profileless" },
+  { pattern: /\b(everyone|everybody|all members|all people|all users|entire team|whole team)\b/, kind: "everyone" },
+  { pattern: /\b(idle|no work|no tasks|no open tasks|nothing assigned|unassigned|not assigned)\b/, kind: "idle" },
+  { pattern: /\b(me|myself|my own)\b/, kind: "self" },
+  { pattern: /\b(overloaded|over capacity|too much work|at capacity)\b/, kind: "overloaded" },
+];
+
+async function resolveUserGroup(
+  ctx: DbCtx,
+  input: string,
+  actorId?: any
+): Promise<{ members: Resolved[]; group?: string; note?: string; unmatched?: string[] }> {
+  const users = (await ctx.db.query("users").collect()) as any[];
+  const label = (u: any) => u.name ?? u.email ?? "Unknown";
+  const normalized = normalizeText(input);
+
+  const group = GROUP_PATTERNS.find((g) => g.pattern.test(normalized));
+  if (group) {
+    const tasks = (await ctx.db.query("tasks").collect()) as any[];
+    const openPoints = (u: any) =>
+      tasks
+        .filter((t) => t.assigneeId === u._id && t.status !== "done")
+        .reduce((sum, t) => sum + (t.storyPoints ?? 0), 0);
+    let picked: any[];
+    switch (group.kind) {
+      case "profileless":
+        picked = users.filter((u) => !u.name && !u.email);
+        break;
+      case "idle":
+        picked = users.filter((u) => u._id !== actorId && openPoints(u) === 0);
+        break;
+      case "overloaded": {
+        const loads = users.map((u) => ({ u, load: openPoints(u) })).filter((r) => r.load > 0);
+        const peak = Math.max(...loads.map((r) => r.load), 0);
+        picked = peak > 0 ? loads.filter((r) => r.load >= peak * 0.75).map((r) => r.u) : [];
+        break;
+      }
+      case "self":
+        picked = users.filter((u) => u._id === actorId);
+        break;
+      default:
+        picked = users;
+    }
+    return {
+      group: group.kind,
+      members: picked.map((u) => ({ ok: true, id: u._id, name: label(u) })),
+    };
+  }
+
+  // An explicit list ("Dana and Marcus", "Sam, Lee") resolves part by part, so
+  // naming two people never silently acts on only the first.
+  const parts = input
+    .split(/\s*(?:,|\band\b|&)\s*/i)
+    .map((p) => p.trim())
+    .filter((p) => p.length > 1);
+  if (parts.length > 1) {
+    const members: Resolved[] = [];
+    const unmatched: string[] = [];
+    for (const part of parts) {
+      const resolved = await resolveUser(ctx, part);
+      if (!resolved.ok || !resolved.id) {
+        unmatched.push(part);
+        continue;
+      }
+      members.push({
+        ok: true,
+        id: resolved.id,
+        name: resolved.name,
+        note: resolved.note,
+      });
+    }
+    if (members.length) return { members, unmatched };
+  }
+
+  const candidates: FuzzyCandidate<any>[] = users.map((u) => ({
+    value: u._id,
+    label: label(u),
+    aliases: [u.email, u.jobTitle, u.department].filter(Boolean) as string[],
+  }));
+  const matches = findAllFuzzy(input, candidates);
+
+  // A plural noun in the utterance ("members", "people", "users") means the
+  // user means the whole group, so every good-enough match counts.
+  const plural = /\b(members?|people|persons?|users|ones?)\b/.test(normalized);
+  const accepted = plural ? matches.filter((m) => m.score >= 0.7) : matches.slice(0, 1);
+
+  return {
+    members: accepted.map((m) => {
+      const user = users.find((u) => u._id === m.item.value);
+      return {
+        ok: true,
+        id: m.item.value,
+        name: label(user),
+        note: m.corrected ? `Matched your "${input}" to "${m.label}"` : undefined,
+      };
+    }),
+    unmatched: plural ? matches.filter((m) => m.score < 0.7).map((m) => m.label) : undefined,
   };
 }
 
@@ -2911,6 +3021,13 @@ export const updateTeamMember = internalMutation({
  * open work and delete their user record. Gated — the first call reports the
  * blast radius and waits for the user to confirm.
  */
+/**
+ * Removes people from the workspace. Accepts a single name ("Dana") or a
+ * plural/collective utterance ("the unknown members", "everyone except me") —
+ * the group is resolved to a concrete list before anything is touched, so a
+ * plural request can never quietly act on just one person. The signed-in user
+ * is always excluded from a group removal.
+ */
 export const removeTeamMember = internalMutation({
   args: {
     user: v.string(),
@@ -2918,59 +3035,121 @@ export const removeTeamMember = internalMutation({
   },
   handler: async (ctx, args) => {
     const actor = await requireActor(ctx);
-    const resolved = await resolveUser(ctx, args.user);
-    if (!resolved.ok) return { error: resolved.error };
-    if (resolved.id === actor) {
+    const group = await resolveUserGroup(ctx, args.user, actor);
+
+    if (!group.members.length) {
+      const all = await ctx.db.query("users").collect();
+      const names = (all as any[]).map((u) => u.name ?? u.email ?? "Unknown");
+      return {
+        error: `No team member matches "${args.user}". The team is: ${names.join(", ") || "empty"}.`,
+      };
+    }
+
+    const targets = group.members.filter((m) => m.id !== actor);
+    if (!targets.length) {
       return { error: "You cannot remove yourself from the workspace." };
     }
 
-    const memberships = await ctx.db
-      .query("projectMembers")
-      .withIndex("by_user", (q: any) => q.eq("userId", resolved.id))
-      .collect();
-    const assigned = await ctx.db
-      .query("tasks")
-      .withIndex("by_assignee", (q: any) => q.eq("assigneeId", resolved.id))
-      .collect();
-    const open = assigned.filter((t: any) => t.status !== "done");
-    const projectNames = await Promise.all(
-      memberships.map(async (m: any) => (await getDoc(ctx, m.projectId))?.name ?? "Unknown")
-    );
+    const plan: {
+      id: any;
+      name: string;
+      projects: string[];
+      openTasks: number;
+      memberships: any[];
+      open: any[];
+      notifications: any[];
+      note?: string;
+    }[] = [];
+
+    for (const target of targets) {
+      const memberships = (await ctx.db
+        .query("projectMembers")
+        .withIndex("by_user", (q: any) => q.eq("userId", target.id))
+        .collect()) as any[];
+      const assigned = (await ctx.db
+        .query("tasks")
+        .withIndex("by_assignee", (q: any) => q.eq("assigneeId", target.id))
+        .collect()) as any[];
+      const notifications = (await ctx.db
+        .query("notifications")
+        .withIndex("by_user", (q: any) => q.eq("userId", target.id))
+        .collect()) as any[];
+      const projects: string[] = [];
+      for (const m of memberships) {
+        projects.push((await getDoc(ctx, m.projectId))?.name ?? "Unknown");
+      }
+      plan.push({
+        id: target.id,
+        name: target.name ?? "Unknown",
+        projects,
+        openTasks: assigned.filter((t) => t.status !== "done").length,
+        memberships,
+        open: assigned.filter((t) => t.status !== "done"),
+        notifications,
+        note: target.note,
+      });
+    }
+
+    const totalProjects = new Set(plan.flatMap((p) => p.projects)).size;
+    const totalTasks = plan.reduce((s, p) => s + p.openTasks, 0);
 
     if (!args.confirmed) {
+      const detail = plan
+        .map(
+          (p) =>
+            `${p.name} — ${p.projects.length} project(s)${p.projects.length ? ` (${p.projects.join(", ")})` : ""}, ${p.openTasks} open task(s)`
+        )
+        .join("; ");
+      const selfNote =
+        group.members.length > targets.length
+          ? ` I left you out of it, since you cannot remove yourself.`
+          : "";
       return {
         needsConfirmation: true,
-        message: `Removing ${resolved.name} from the team removes them from ${memberships.length} project(s) (${projectNames.join(", ") || "none"}) and unassigns ${open.length} open task(s), then deletes their user record. Ask the user to confirm, then call remove_team_member again with confirmed: true.`,
+        resolvedCount: plan.length,
+        names: plan.map((p) => p.name),
+        message:
+          plan.length === 1
+            ? `Removing ${detail} also deletes their user record.${selfNote} Ask the user to confirm, then call remove_team_member again with confirmed: true.`
+            : `This would remove ${plan.length} people from the team: ${detail}. Their user records are deleted too, and ${totalTasks} open task(s) across ${totalProjects} project(s) become unassigned.${selfNote} Ask the user to confirm, then call remove_team_member again with confirmed: true.`,
       };
     }
 
     const now = Date.now();
-    for (const task of open as any[]) {
-      await ctx.db.patch(task._id, { assigneeId: undefined, updatedAt: now });
+    for (const entry of plan) {
+      for (const task of entry.open) {
+        await ctx.db.patch(task._id, { assigneeId: undefined, updatedAt: now });
+      }
+      for (const membership of entry.memberships) {
+        await ctx.db.delete(membership._id);
+      }
+      for (const note of entry.notifications) {
+        await ctx.db.delete(note._id);
+      }
+      await ctx.db.delete(entry.id);
     }
-    for (const membership of memberships as any[]) {
-      await ctx.db.delete(membership._id);
+
+    for (const entry of plan) {
+      await logActivity(
+        ctx,
+        actor,
+        undefined,
+        plan.length === 1
+          ? `removed team member ${entry.name} (via AIE Agent)`
+          : `removed ${plan.length} team members including ${entry.name} (via AIE Agent)`,
+        "team",
+        entry.name
+      );
     }
-    for (const note of await ctx.db
-      .query("notifications")
-      .withIndex("by_user", (q: any) => q.eq("userId", resolved.id))
-      .collect()) {
-      await ctx.db.delete(note._id);
-    }
-    await ctx.db.delete(resolved.id);
-    await logActivity(
-      ctx,
-      actor,
-      undefined,
-      `removed team member ${resolved.name} (via AIE Agent)`,
-      "team",
-      resolved.name
-    );
+
     return {
       ok: true,
-      userName: resolved.name,
-      projectsLeft: projectNames,
-      tasksUnassigned: open.length,
+      userName: plan.length === 1 ? plan[0].name : `${plan.length} people`,
+      removed: plan.map((p) => p.name),
+      removedCount: plan.length,
+      projectsLeft: Array.from(new Set(plan.flatMap((p) => p.projects))),
+      tasksUnassigned: totalTasks,
+      note: plan.find((p) => p.note)?.note,
     };
   },
 });

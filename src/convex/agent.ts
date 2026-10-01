@@ -309,7 +309,7 @@ const TOOLS = [
       {
         name: "remove_team_member",
         description:
-          "DESTRUCTIVE. Removes a person from the workspace entirely: drops them from every project, unassigns their open tasks and deletes their profile. Requires confirmed: true after the user agrees.",
+          "DESTRUCTIVE. Removes people from the workspace entirely: drops them from every project, unassigns their open tasks and deletes their profiles. Handles one name ('Dana') or a group ('the unknown members', 'the idle members', 'everyone') — pass the user's words as-is. Requires confirmed: true after the user agrees.",
         parameters: {
           type: "OBJECT",
           properties: {
@@ -824,6 +824,8 @@ PEOPLE — GET THIS RIGHT
 - The team is the list of user profiles. add_project_member and assign_task only work on people who ALREADY have a profile. If the user names someone new ("add Dana to the team", "invite Marcus as a backend dev"), call add_team_member with their name — and pass the project at the same time if they mentioned one, so one call does both.
 - Never tell the user a person "doesn't exist" or ask them to sign up first. Creating the profile is your job.
 - To take someone off a single project use remove_project_member. To take them off the workspace entirely (all projects, tasks unassigned, profile deleted) use remove_team_member, which is gated.
+- remove_team_member takes a group, not just one person: pass the utterance as the user said it and it resolves the whole set — "the unknown members" means every profile with no name, "the idle members" means everyone with no open story points. Its confirmation response names exactly who will be removed, so relay that list before asking the user to confirm.
+- A member that shows up as "Unknown" in the Team view is a real profile with no name and no email, not a rendering bug. You can remove those with remove_team_member, or give them a name, job title or department with update_team_member.
 - When handing out work, check their current load first (member_report or list_team) so you do not pile onto whoever already has the most open tasks.
 
 RUNNING WITHOUT THE USER
@@ -1889,10 +1891,15 @@ function describeAction(
     };
   }
   if (name === "remove_team_member") {
+    const removed = Array.isArray(response.removed) ? (response.removed as string[]) : [];
+    const count = typeof response.removedCount === "number" ? response.removedCount : removed.length;
     return {
       tool: name,
       ok: true,
-      label: `Removed ${response.userName} from the team — left ${(response.projectsLeft as unknown[] | undefined)?.length ?? 0} project(s), ${response.tasksUnassigned} task(s) unassigned.`,
+      label:
+        count > 1
+          ? `Removed ${count} team members (${removed.join(", ")}) — ${(response.projectsLeft as unknown[] | undefined)?.length ?? 0} project(s) affected, ${response.tasksUnassigned} task(s) unassigned.`
+          : `Removed ${response.userName} from the team — left ${(response.projectsLeft as unknown[] | undefined)?.length ?? 0} project(s), ${response.tasksUnassigned} task(s) unassigned.`,
     };
   }
   if (name === "mark_notifications_read") {

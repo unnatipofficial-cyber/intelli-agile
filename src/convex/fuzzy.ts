@@ -152,11 +152,25 @@ export function findFuzzy<T>(
   candidates: FuzzyCandidate<T>[],
   threshold = 0.55
 ): FuzzyMatch<T> | null {
-  if (!candidates.length) return null;
+  return findAllFuzzy(input, candidates, threshold)[0] ?? null;
+}
+
+/**
+ * Every candidate that matches, best first. "Remove the unknown members" is a
+ * plural request that names a group, not a person — a single-winner matcher
+ * would silently act on only one of them.
+ */
+export function findAllFuzzy<T>(
+  input: string,
+  candidates: FuzzyCandidate<T>[],
+  threshold = 0.55
+): FuzzyMatch<T>[] {
+  if (!candidates.length) return [];
   const normalizedInput = normalizeText(input);
-  let best: FuzzyMatch<T> | null = null;
+  const matches: FuzzyMatch<T>[] = [];
 
   for (const candidate of candidates) {
+    let best: FuzzyMatch<T> | null = null;
     for (const label of [candidate.label, ...(candidate.aliases ?? [])]) {
       const score = similarity(normalizedInput, label);
       if (!best || score > best.score) {
@@ -168,9 +182,10 @@ export function findFuzzy<T>(
         };
       }
     }
+    if (best && best.score >= threshold) matches.push(best);
   }
 
-  return best && best.score >= threshold ? best : null;
+  return matches.sort((a, b) => b.score - a.score);
 }
 
 /* ── Value coercion ────────────────────────────────────────────── */
