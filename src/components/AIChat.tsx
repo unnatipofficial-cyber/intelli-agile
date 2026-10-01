@@ -1,32 +1,48 @@
 import { useState, useRef, useEffect } from "react";
-import { useAction, useQuery } from "convex/react";
+import { useAction } from "convex/react";
 import { api } from "../convex/_generated/api";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-  MessageCircle,
   X,
   Send,
   Loader2,
   Bot,
   User,
   CheckCircle2,
+  AlertCircle,
+  Sparkles,
 } from "lucide-react";
+
+interface AgentAction {
+  tool: string;
+  label: string;
+  ok: boolean;
+}
 
 interface Message {
   role: "user" | "assistant";
   content: string;
-  /** Present on agent messages: short lines describing what the agent did. */
-  actions?: string[];
+  /** Present on agent messages: what it actually did in the workspace. */
+  actions?: AgentAction[];
 }
+
+const THINKING_LINES = [
+  "Reading the board…",
+  "Checking the backlog…",
+  "Matching names…",
+  "Working on it…",
+];
 
 const SUGGESTED_PROMPTS = [
   "Create a project called Apollo, high priority, due Dec 15",
-  "Assign our best performers to the Apollo project",
-  "Add a task 'Design onboarding flow' to Apollo and assign it to Sarah",
-  "What are our current risks and what should I watch?",
+  "Add Sarah and James to Apollo",
+  "Create a task 'Design onboarding flow' in Apollo and assign it to Sarah",
+  "Who's doing the best this sprint?",
+  "How's Apollo going — what should I worry about?",
+  "Log a high risk: vendor API delay",
 ];
 
 export default function AIChat() {
@@ -35,7 +51,7 @@ export default function AIChat() {
     {
       role: "assistant",
       content:
-        "Hello! I'm the AIE Agent — I don't just advise, I act. Ask me to create a project, add teammates to it, or create and assign tasks, and I'll do it. Or just ask me anything about Agile.",
+        "I'm the AIE Agent — I act, I don't just advise. Tell me to create a project, staff it, break it into sprints and tasks, assign people, log time, manage risks, or start/complete a sprint and I'll do it. You can also just ask: who is performing, how a project is going, or for a dashboard read-out. Typos are fine — I'll work out what you meant.",
     },
   ]);
   const [input, setInput] = useState("");
@@ -43,9 +59,8 @@ export default function AIChat() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  const [thinkingIndex, setThinkingIndex] = useState(0);
   const chatAction = useAction(api.agent.chat);
-  const team = useQuery(api.team.listMembers);
-  const projects = useQuery(api.projects.list);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -56,6 +71,20 @@ export default function AIChat() {
       setTimeout(() => inputRef.current?.focus(), 100);
     }
   }, [isOpen]);
+
+  // Rotate the status line while the agent works, so a long tool chain
+  // (create project -> add members -> create tasks) doesn't look frozen.
+  useEffect(() => {
+    if (!isLoading) {
+      setThinkingIndex(0);
+      return;
+    }
+    const timer = setInterval(
+      () => setThinkingIndex((i) => (i + 1) % THINKING_LINES.length),
+      2200
+    );
+    return () => clearInterval(timer);
+  }, [isLoading]);
 
   const sendMessage = async (text?: string) => {
     const content = text || input.trim();
@@ -118,6 +147,7 @@ export default function AIChat() {
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
             onClick={() => setIsOpen(true)}
+            aria-label="Open the AIE Agent"
             className="fixed bottom-28 right-4 md:bottom-8 md:right-6 z-40 w-12 h-12 rounded-full bg-primary text-primary-foreground shadow-lg flex items-center justify-center hover:bg-primary/90 transition-colors"
           >
             <Bot className="w-5 h-5" />
@@ -144,7 +174,7 @@ export default function AIChat() {
                 <div>
                   <p className="text-sm font-semibold">AIE Agent</p>
                   <p className="text-[10px] text-muted-foreground">
-                    Can create projects, assign work, answer questions
+                    Can build, assign, analyse — typos welcome
                   </p>
                 </div>
               </div>
@@ -153,6 +183,7 @@ export default function AIChat() {
                 size="icon"
                 className="w-8 h-8"
                 onClick={() => setIsOpen(false)}
+                aria-label="Close the agent"
               >
                 <X className="w-4 h-4" />
               </Button>
@@ -181,20 +212,43 @@ export default function AIChat() {
                         : "bg-muted/60 text-foreground rounded-bl-sm"
                     )}
                   >
-                    {msg.content.split("\n").map((line, j) => (
-                      <p key={j} className={j > 0 ? "mt-1.5" : ""}>
-                        {line}
-                      </p>
-                    ))}
+                    {msg.content.split("\n").map((line, j) => {
+                      if (!line.trim()) return null;
+                      const isBullet = /^\s*[-*•]\s+/.test(line);
+                      const text = line.replace(/^\s*[-*•]\s+/, "");
+                      return (
+                        <p
+                          key={j}
+                          className={cn(
+                            j > 0 && "mt-1.5",
+                            isBullet && "flex gap-1.5"
+                          )}
+                        >
+                          {isBullet && (
+                            <span className="mt-[7px] h-1 w-1 shrink-0 rounded-full bg-current opacity-60" />
+                          )}
+                          <span>{text}</span>
+                        </p>
+                      );
+                    })}
                     {msg.actions && msg.actions.length > 0 && (
                       <div className="mt-2 pt-2 border-t border-border/40 space-y-1">
                         {msg.actions.map((action, k) => (
                           <p
                             key={k}
-                            className="flex items-start gap-1.5 text-[11px] text-muted-foreground"
+                            className={cn(
+                              "flex items-start gap-1.5 text-[11px]",
+                              action.ok
+                                ? "text-muted-foreground"
+                                : "text-amber-600 dark:text-amber-400"
+                            )}
                           >
-                            <CheckCircle2 className="w-3 h-3 mt-0.5 shrink-0 text-emerald-500" />
-                            {action}
+                            {action.ok ? (
+                              <CheckCircle2 className="w-3 h-3 mt-0.5 shrink-0 text-emerald-500" />
+                            ) : (
+                              <AlertCircle className="w-3 h-3 mt-0.5 shrink-0" />
+                            )}
+                            {action.label}
                           </p>
                         ))}
                       </div>
@@ -215,12 +269,7 @@ export default function AIChat() {
                   <div className="bg-muted/60 rounded-xl rounded-bl-sm px-3 py-2">
                     <span className="flex items-center gap-2 text-xs text-muted-foreground">
                       <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      {messages.at(-1)?.role === "user" &&
-                      /create|add|assign|make|set/i.test(
-                        messages.at(-1)?.content ?? ""
-                      )
-                        ? "Working on it…"
-                        : "Thinking…"}
+                      {THINKING_LINES[thinkingIndex]}
                     </span>
                   </div>
                 </div>
@@ -231,8 +280,8 @@ export default function AIChat() {
             {/* Suggested prompts (shown when no messages besides greeting) */}
             {messages.length <= 1 && (
               <div className="px-4 pb-2">
-                <p className="text-[10px] text-muted-foreground mb-2">
-                  Try:
+                <p className="text-[10px] text-muted-foreground mb-2 flex items-center gap-1">
+                  <Sparkles className="w-3 h-3" /> Try:
                 </p>
                 <div className="flex flex-wrap gap-1.5">
                   {SUGGESTED_PROMPTS.map((prompt) => (
@@ -256,7 +305,7 @@ export default function AIChat() {
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={handleKeyDown}
-                  placeholder="Ask me to create, assign, or analyze…"
+                  placeholder="Create, assign, analyse… typos are fine"
                   disabled={isLoading}
                   className="flex-1"
                 />
@@ -265,6 +314,7 @@ export default function AIChat() {
                   onClick={() => sendMessage()}
                   disabled={!input.trim() || isLoading}
                   className="w-9 h-9 shrink-0"
+                  aria-label="Send message"
                 >
                   {isLoading ? (
                     <Loader2 className="w-4 h-4 animate-spin" />
