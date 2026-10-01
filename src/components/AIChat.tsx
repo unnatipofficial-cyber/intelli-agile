@@ -38,8 +38,8 @@ const THINKING_LINES = [
 
 const SUGGESTED_PROMPTS = [
   "Create a project called Apollo, high priority, due Dec 15",
-  "Add Sarah and James to Apollo",
-  "Create a task 'Design onboarding flow' in Apollo and assign it to Sarah",
+  "Add Dana Reyes to the team as a QA lead, and put her on Apollo",
+  "Move every in-progress task in Apollo to review",
   "Who's doing the best this sprint?",
   "How's Apollo going — what should I worry about?",
   "Log a high risk: vendor API delay",
@@ -51,7 +51,7 @@ export default function AIChat() {
     {
       role: "assistant",
       content:
-        "I'm the AIE Agent — I act, I don't just advise. Tell me to create a project, staff it, break it into sprints and tasks, assign people, log time, manage risks, or start/complete a sprint and I'll do it. You can also just ask: who is performing, how a project is going, or for a dashboard read-out. Typos are fine — I'll work out what you meant.",
+        "I'm the AIE Agent — I act, I don't just advise. I can create projects, add and remove people (including brand-new team members), plan sprints, epics, stories and tasks, assign work, log time, manage risks and answer questions about the board. You can also just ask: who is performing, how a project is going, or for a dashboard read-out. Typos are fine — I'll work out what you meant.",
     },
   ]);
   const [input, setInput] = useState("");

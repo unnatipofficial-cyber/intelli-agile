@@ -17,6 +17,7 @@
 import { v } from "convex/values";
 import { internalQuery, internalMutation } from "./_generated/server";
 import { getAuthUserId } from "@convex-dev/auth/server";
+import { api } from "./_generated/api";
 import {
   findFuzzy,
   normEnum,
@@ -82,7 +83,12 @@ async function resolveProject(ctx: DbCtx, input?: string): Promise<Resolved> {
 
 async function resolveUser(ctx: DbCtx, input?: string): Promise<Resolved> {
   const users = await ctx.db.query("users").collect();
-  if (!users.length) return { ok: false, error: "There are no users yet." };
+  if (!users.length) {
+    return {
+      ok: false,
+      error: "There are no team members yet. Create one with add_team_member first.",
+    };
+  }
   const label = (u: any) => u.name ?? u.email ?? "Unknown";
   const names = users.map(label).join(", ");
   if (!input) return { ok: false, error: `Who? Team members: ${names}` };
@@ -93,7 +99,10 @@ async function resolveUser(ctx: DbCtx, input?: string): Promise<Resolved> {
   }));
   const match = findFuzzy(input, candidates);
   if (!match) {
-    return { ok: false, error: `No team member matches "${input}". Team: ${names}` };
+    return {
+      ok: false,
+      error: `No team member matches "${input}". Team: ${names}. If this person is new to the workspace, create them with add_team_member instead of assigning work.`,
+    };
   }
   const user = users.find((u: any) => u._id === match.item.value);
   return {
@@ -2274,5 +2283,658 @@ export const createTasksBulk = internalMutation({
       failed,
       note: project.note,
     };
+  },
+});
+
+/* ═══════════════════════════════════════════════════════════════
+   TEAM MEMBERSHIP
+   In AIE the "team" is the users table: being on the team means having a user
+   record, and being on a project means a projectMembers row. These tools cover
+   both halves plus removal.
+   ═══════════════════════════════════════════════════════════════ */
+
+/**
+ * Add someone to the team. Creates their user record — enriching rather than
+ * duplicating when an email or a very close name already exists — and
+ * optionally seats them on a project in the same call.
+ */
+export const addTeamMember = internalMutation({
+  args: {
+    name: v.string(),
+    email: v.optional(v.string()),
+    jobTitle: v.optional(v.string()),
+    department: v.optional(v.string()),
+    project: v.optional(v.string()),
+    role: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const actor = await requireActor(ctx);
+    const name = args.name.trim();
+    const email = args.email?.trim().toLowerCase();
+
+    let project: Resolved | undefined;
+    if (args.project) {
+      project = await resolveProject(ctx, args.project);
+      if (!project.ok) return { error: project.error };
+    }
+
+    // Prefer an exact email match, then a near-exact name match, so we enrich
+    // an existing person instead of creating a second copy of them.
+    let userId: any;
+    let alreadyExisted = false;
+    if (email) {
+      const byEmail = await ctx.db
+        .query("users")
+        .withIndex("email", (q: any) => q.eq("email", email))
+        .first();
+      if (byEmail) {
+        userId = byEmail._id;
+        alreadyExisted = true;
+      }
+    }
+    if (!userId) {
+      const users = await ctx.db.query("users").collect();
+      const match = findFuzzy(
+        name,
+        users.map((u: any) => ({
+          value: u._id,
+          label: (u.name ?? u.email ?? "Unknown") as string,
+          aliases: u.email ? [u.email] : [],
+        }))
+      );
+      if (match && match.score > 0.9) {
+        userId = match.item.value;
+        alreadyExisted = true;
+      }
+    }
+
+    if (!userId) {
+      userId = await ctx.db.insert("users", {
+        name,
+        email,
+        jobTitle: args.jobTitle?.trim(),
+        department: args.department?.trim(),
+      });
+      await ctx.db.insert("notifications", {
+        userId,
+        title: `Welcome to the team, ${name}`,
+        message: args.jobTitle
+          ? `You have been added to AIE as ${args.jobTitle}.`
+          : "You have been added to the AIE workspace.",
+        type: "team",
+        isRead: false,
+        createdAt: Date.now(),
+      });
+    } else {
+      // Fill in profile details we learned that the record was missing.
+      const existing = await getDoc(ctx, userId);
+      const patch: Record<string, unknown> = {};
+      if (!existing?.jobTitle && args.jobTitle) patch.jobTitle = args.jobTitle.trim();
+      if (!existing?.department && args.department) patch.department = args.department.trim();
+      if (!existing?.email && email) patch.email = email;
+      if (Object.keys(patch).length > 0) await ctx.db.patch(userId, patch);
+    }
+
+    let seatedOn: string | null = null;
+    if (project?.ok && project.id) {
+      const record = await ctx.db
+        .query("projectMembers")
+        .withIndex("by_project_user", (q: any) =>
+          q.eq("projectId", project.id).eq("userId", userId)
+        )
+        .first();
+      if (!record) {
+        await ctx.db.insert("projectMembers", {
+          projectId: project.id,
+          userId,
+          role: args.role?.trim() || "member",
+          joinedAt: Date.now(),
+        });
+        seatedOn = project.name ?? null;
+        await logActivity(
+          ctx,
+          actor,
+          project.id,
+          `added ${name} to project ${project.name} (via AIE Agent)`,
+          "project",
+          project.name
+        );
+      } else {
+        seatedOn = `${project.name} (already a member)`;
+      }
+    }
+
+    await logActivity(
+      ctx,
+      actor,
+      project?.ok ? project.id : undefined,
+      `${alreadyExisted ? "updated team member" : "added team member"} ${name} (via AIE Agent)`,
+      "team",
+      name
+    );
+
+    return {
+      ok: true,
+      userName: name,
+      alreadyExisted,
+      email: email ?? null,
+      project: seatedOn,
+      note: project?.note,
+    };
+  },
+});
+
+export const updateTeamMember = internalMutation({
+  args: {
+    user: v.string(),
+    name: v.optional(v.string()),
+    jobTitle: v.optional(v.string()),
+    department: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const actor = await requireActor(ctx);
+    const resolved = await resolveUser(ctx, args.user);
+    if (!resolved.ok) return { error: resolved.error };
+    const patch: Record<string, unknown> = {};
+    const changes: string[] = [];
+    if (args.name) {
+      patch.name = args.name.trim();
+      changes.push(`name → ${args.name.trim()}`);
+    }
+    if (args.jobTitle !== undefined) {
+      patch.jobTitle = args.jobTitle;
+      changes.push(`job title → ${args.jobTitle || "none"}`);
+    }
+    if (args.department !== undefined) {
+      patch.department = args.department;
+      changes.push(`department → ${args.department || "none"}`);
+    }
+    if (changes.length === 0) return { error: "Nothing to update — no fields were provided." };
+    await ctx.db.patch(resolved.id, patch);
+    await logActivity(
+      ctx,
+      actor,
+      undefined,
+      `updated team member ${resolved.name}: ${changes.join(", ")} (via AIE Agent)`,
+      "team",
+      resolved.name
+    );
+    return { ok: true, userName: args.name?.trim() ?? resolved.name, changes, note: resolved.note };
+  },
+});
+
+/**
+ * Take someone off the team: drop every project membership, unassign their
+ * open work and delete their user record. Gated — the first call reports the
+ * blast radius and waits for the user to confirm.
+ */
+export const removeTeamMember = internalMutation({
+  args: {
+    user: v.string(),
+    confirmed: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    const actor = await requireActor(ctx);
+    const resolved = await resolveUser(ctx, args.user);
+    if (!resolved.ok) return { error: resolved.error };
+    if (resolved.id === actor) {
+      return { error: "You cannot remove yourself from the workspace." };
+    }
+
+    const memberships = await ctx.db
+      .query("projectMembers")
+      .withIndex("by_user", (q: any) => q.eq("userId", resolved.id))
+      .collect();
+    const assigned = await ctx.db
+      .query("tasks")
+      .withIndex("by_assignee", (q: any) => q.eq("assigneeId", resolved.id))
+      .collect();
+    const open = assigned.filter((t: any) => t.status !== "done");
+    const projectNames = await Promise.all(
+      memberships.map(async (m: any) => (await getDoc(ctx, m.projectId))?.name ?? "Unknown")
+    );
+
+    if (!args.confirmed) {
+      return {
+        needsConfirmation: true,
+        message: `Removing ${resolved.name} from the team removes them from ${memberships.length} project(s) (${projectNames.join(", ") || "none"}) and unassigns ${open.length} open task(s), then deletes their user record. Ask the user to confirm, then call remove_team_member again with confirmed: true.`,
+      };
+    }
+
+    const now = Date.now();
+    for (const task of open as any[]) {
+      await ctx.db.patch(task._id, { assigneeId: undefined, updatedAt: now });
+    }
+    for (const membership of memberships as any[]) {
+      await ctx.db.delete(membership._id);
+    }
+    for (const note of await ctx.db
+      .query("notifications")
+      .withIndex("by_user", (q: any) => q.eq("userId", resolved.id))
+      .collect()) {
+      await ctx.db.delete(note._id);
+    }
+    await ctx.db.delete(resolved.id);
+    await logActivity(
+      ctx,
+      actor,
+      undefined,
+      `removed team member ${resolved.name} (via AIE Agent)`,
+      "team",
+      resolved.name
+    );
+    return {
+      ok: true,
+      userName: resolved.name,
+      projectsLeft: projectNames,
+      tasksUnassigned: open.length,
+    };
+  },
+});
+
+/** Mark notifications read, for the signed-in user or a named person. */
+export const markNotificationsRead = internalMutation({
+  args: { user: v.optional(v.string()) },
+  handler: async (ctx, args) => {
+    await requireActor(ctx);
+    let userId = await getAuthUserId(ctx);
+    let targetName = "you";
+    if (args.user) {
+      const resolved = await resolveUser(ctx, args.user);
+      if (!resolved.ok) return { error: resolved.error };
+      userId = resolved.id;
+      targetName = resolved.name ?? "them";
+    }
+    if (!userId) throw new Error("Not authenticated");
+    const unread = await ctx.db
+      .query("notifications")
+      .withIndex("by_user_read", (q: any) => q.eq("userId", userId).eq("isRead", false))
+      .collect();
+    for (const note of unread as any[]) {
+      await ctx.db.patch(note._id, { isRead: true });
+    }
+    return { ok: true, userName: targetName, markedRead: unread.length };
+  },
+});
+
+/* ═══════════════════════════════════════════════════════════════
+   EPICS, STORIES, BULK EDITS, INSIGHTS
+   ═══════════════════════════════════════════════════════════════ */
+
+export const updateEpic = internalMutation({
+  args: {
+    epic: v.string(),
+    project: v.optional(v.string()),
+    title: v.optional(v.string()),
+    description: v.optional(v.string()),
+    status: v.optional(v.string()),
+    priority: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const actor = await requireActor(ctx);
+    let projectId: any;
+    if (args.project) {
+      const p = await resolveProject(ctx, args.project);
+      if (!p.ok) return { error: p.error };
+      projectId = p.id;
+    }
+    const epic = await resolveEpic(ctx, args.epic, projectId);
+    if (!epic.ok) return { error: epic.error };
+    const record = await getDoc(ctx, epic.id);
+    const patch: Record<string, unknown> = { updatedAt: Date.now() };
+    const changes: string[] = [];
+    if (args.title) {
+      patch.title = args.title.trim();
+      changes.push(`renamed to "${args.title.trim()}"`);
+    }
+    if (args.description !== undefined) {
+      patch.description = args.description;
+      changes.push("description updated");
+    }
+    if (args.status) {
+      patch.status = normEnum(args.status, ["todo", "in-progress", "done"] as const, record.status);
+      changes.push(`status → ${patch.status}`);
+    }
+    if (args.priority) {
+      patch.priority = normEnum(args.priority, PRIORITY, record.priority);
+      changes.push(`priority → ${patch.priority}`);
+    }
+    if (changes.length === 0) return { error: "Nothing to update — no fields were provided." };
+    await ctx.db.patch(epic.id, patch);
+    await logActivity(
+      ctx,
+      actor,
+      record.projectId,
+      `updated epic ${record.title}: ${changes.join(", ")} (via AIE Agent)`,
+      "epic",
+      record.title
+    );
+    return { ok: true, epicTitle: args.title ?? record.title, changes, note: epic.note };
+  },
+});
+
+export const deleteEpic = internalMutation({
+  args: {
+    epic: v.string(),
+    project: v.optional(v.string()),
+    confirmed: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    const actor = await requireActor(ctx);
+    let projectId: any;
+    if (args.project) {
+      const p = await resolveProject(ctx, args.project);
+      if (!p.ok) return { error: p.error };
+      projectId = p.id;
+    }
+    const resolved = await resolveEpic(ctx, args.epic, projectId);
+    if (!resolved.ok) return { error: resolved.error };
+    const epic = await getDoc(ctx, resolved.id);
+    const [tasks, stories] = await Promise.all([
+      ctx.db.query("tasks").withIndex("by_epic", (q: any) => q.eq("epicId", resolved.id)).collect(),
+      ctx.db.query("userStories").withIndex("by_epic", (q: any) => q.eq("epicId", resolved.id)).collect(),
+    ]);
+    if (!args.confirmed) {
+      return {
+        needsConfirmation: true,
+        message: `Deleting the epic "${epic.title}" detaches ${tasks.length} task(s) and ${stories.length} story/ies from it — they are kept, just no longer under this epic. Ask the user to confirm, then call delete_epic again with confirmed: true.`,
+      };
+    }
+    const now = Date.now();
+    for (const row of [...(tasks as any[]), ...(stories as any[])]) {
+      await ctx.db.patch(row._id, { epicId: undefined, updatedAt: now });
+    }
+    await ctx.db.delete(resolved.id);
+    await logActivity(ctx, actor, epic.projectId, `deleted epic ${epic.title} (via AIE Agent)`, "epic", epic.title);
+    return { ok: true, deleted: epic.title, detachedTasks: tasks.length, detachedStories: stories.length };
+  },
+});
+
+export const updateStory = internalMutation({
+  args: {
+    story: v.string(),
+    project: v.optional(v.string()),
+    title: v.optional(v.string()),
+    description: v.optional(v.string()),
+    acceptanceCriteria: v.optional(v.string()),
+    status: v.optional(v.string()),
+    priority: v.optional(v.string()),
+    storyPoints: v.optional(v.number()),
+    assignee: v.optional(v.string()),
+    sprint: v.optional(v.string()),
+    epic: v.optional(v.string()),
+    dueDate: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const actor = await requireActor(ctx);
+    let projectId: any;
+    if (args.project) {
+      const p = await resolveProject(ctx, args.project);
+      if (!p.ok) return { error: p.error };
+      projectId = p.id;
+    }
+    const story = await resolveStory(ctx, args.story, projectId);
+    if (!story.ok) return { error: story.error };
+    const record = await getDoc(ctx, story.id);
+
+    const patch: Record<string, unknown> = { updatedAt: Date.now() };
+    const changes: string[] = [];
+    if (args.title) {
+      patch.title = args.title.trim();
+      changes.push(`renamed to "${args.title.trim()}"`);
+    }
+    if (args.description !== undefined) {
+      patch.description = args.description;
+      changes.push("description updated");
+    }
+    if (args.acceptanceCriteria !== undefined) {
+      patch.acceptanceCriteria = args.acceptanceCriteria;
+      changes.push("acceptance criteria updated");
+    }
+    if (args.status) {
+      patch.status = normEnum(args.status, TASK_STATUS, record.status);
+      changes.push(`status → ${patch.status}`);
+    }
+    if (args.priority) {
+      patch.priority = normEnum(args.priority, PRIORITY, record.priority);
+      changes.push(`priority → ${patch.priority}`);
+    }
+    if (args.storyPoints !== undefined) {
+      patch.storyPoints = args.storyPoints;
+      changes.push(`story points → ${args.storyPoints}`);
+    }
+    if (args.dueDate !== undefined) {
+      patch.dueDate = toMillis(args.dueDate);
+      changes.push(`due date → ${parseDateInput(args.dueDate) ?? "cleared"}`);
+    }
+    if (args.assignee) {
+      const a = await resolveUser(ctx, args.assignee);
+      if (!a.ok) return { error: a.error };
+      patch.assigneeId = a.id;
+      changes.push(`assigned to ${a.name}`);
+    }
+    if (args.sprint) {
+      const s = await resolveSprint(ctx, args.sprint, record.projectId);
+      if (!s.ok) return { error: s.error };
+      patch.sprintId = s.id;
+      changes.push(`sprint → ${s.name}`);
+    }
+    if (args.epic) {
+      const e = await resolveEpic(ctx, args.epic, record.projectId);
+      if (!e.ok) return { error: e.error };
+      patch.epicId = e.id;
+      changes.push(`epic → ${e.name}`);
+    }
+    if (changes.length === 0) return { error: "Nothing to update — no fields were provided." };
+    await ctx.db.patch(story.id, patch);
+    await logActivity(
+      ctx,
+      actor,
+      record.projectId,
+      `updated story ${record.title}: ${changes.join(", ")} (via AIE Agent)`,
+      "story",
+      record.title
+    );
+    return { ok: true, storyTitle: args.title ?? record.title, changes, note: story.note };
+  },
+});
+
+export const deleteStory = internalMutation({
+  args: {
+    story: v.string(),
+    project: v.optional(v.string()),
+    confirmed: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    const actor = await requireActor(ctx);
+    let projectId: any;
+    if (args.project) {
+      const p = await resolveProject(ctx, args.project);
+      if (!p.ok) return { error: p.error };
+      projectId = p.id;
+    }
+    const resolved = await resolveStory(ctx, args.story, projectId);
+    if (!resolved.ok) return { error: resolved.error };
+    const story = await getDoc(ctx, resolved.id);
+    const tasks = await ctx.db
+      .query("tasks")
+      .withIndex("by_story", (q: any) => q.eq("storyId", resolved.id))
+      .collect();
+    if (!args.confirmed) {
+      return {
+        needsConfirmation: true,
+        message: `Deleting the story "${story.title}" also detaches ${tasks.length} linked task(s). Ask the user to confirm, then call delete_story again with confirmed: true.`,
+      };
+    }
+    const now = Date.now();
+    for (const task of tasks as any[]) {
+      await ctx.db.patch(task._id, { storyId: undefined, updatedAt: now });
+    }
+    await ctx.db.delete(resolved.id);
+    await logActivity(ctx, actor, story.projectId, `deleted story ${story.title} (via AIE Agent)`, "story", story.title);
+    return { ok: true, deleted: story.title, detachedTasks: tasks.length };
+  },
+});
+
+/**
+ * Sweep a filtered set of tasks to new values in one call: "move every open
+ * task in Apollo to review", "reassign all of Sarah's in-progress work to
+ * James". Gated, because a loose filter can match far more than expected.
+ */
+export const bulkUpdateTasks = internalMutation({
+  args: {
+    project: v.optional(v.string()),
+    assignee: v.optional(v.string()),
+    matchTitle: v.optional(v.string()),
+    matchStatus: v.optional(v.string()),
+    matchPriority: v.optional(v.string()),
+    matchType: v.optional(v.string()),
+    setStatus: v.optional(v.string()),
+    setPriority: v.optional(v.string()),
+    setAssignee: v.optional(v.string()),
+    setSprint: v.optional(v.string()),
+    confirmed: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    const actor = await requireActor(ctx);
+    let projectId: any;
+    let projectName: string | undefined;
+    if (args.project) {
+      const p = await resolveProject(ctx, args.project);
+      if (!p.ok) return { error: p.error };
+      projectId = p.id;
+      projectName = p.name;
+    }
+
+    const hasChange =
+      args.setStatus !== undefined ||
+      args.setPriority !== undefined ||
+      args.setAssignee !== undefined ||
+      args.setSprint !== undefined;
+    if (!hasChange) {
+      return {
+        error:
+          "Nothing to do — pass at least one of setStatus, setPriority, setAssignee or setSprint.",
+      };
+    }
+
+    let assigneeId: any;
+    let assigneeName: string | undefined;
+    if (args.assignee) {
+      const a = await resolveUser(ctx, args.assignee);
+      if (!a.ok) return { error: a.error };
+      assigneeId = a.id;
+      assigneeName = a.name;
+    }
+    let newAssigneeId: any;
+    let newAssigneeName: string | undefined;
+    if (args.setAssignee) {
+      const a = await resolveUser(ctx, args.setAssignee);
+      if (!a.ok) return { error: a.error };
+      newAssigneeId = a.id;
+      newAssigneeName = a.name;
+    }
+
+    let candidates = await ctx.db.query("tasks").collect();
+    if (projectId) candidates = candidates.filter((t: any) => t.projectId === projectId);
+    if (assigneeId) candidates = candidates.filter((t: any) => t.assigneeId === assigneeId);
+    if (args.matchStatus) {
+      const status = normEnum(args.matchStatus, TASK_STATUS, "todo");
+      candidates = candidates.filter((t: any) => t.status === status);
+    }
+    if (args.matchPriority) {
+      const priority = normEnum(args.matchPriority, PRIORITY, "medium");
+      candidates = candidates.filter((t: any) => t.priority === priority);
+    }
+    if (args.matchType) {
+      const type = normEnum(args.matchType, TASK_TYPE, "task");
+      candidates = candidates.filter((t: any) => t.type === type);
+    }
+    if (args.matchTitle) {
+      const match = findFuzzy(
+        args.matchTitle,
+        candidates.map((t: any) => ({ value: t._id, label: t.title }))
+      );
+      candidates = match ? candidates.filter((t: any) => t._id === match.item.value) : [];
+    }
+
+    const scope = [
+      projectName ? `project ${projectName}` : "all projects",
+      assigneeName ? `assigned to ${assigneeName}` : null,
+      args.matchStatus ? `status ${args.matchStatus}` : null,
+      args.matchPriority ? `priority ${args.matchPriority}` : null,
+      args.matchTitle ? `matching "${args.matchTitle}"` : null,
+    ]
+      .filter(Boolean)
+      .join(", ");
+
+    if (candidates.length === 0) {
+      return { error: `No tasks match that filter (${scope}). Nothing was changed.` };
+    }
+    if (!args.confirmed) {
+      return {
+        needsConfirmation: true,
+        message: `About to change ${candidates.length} task(s) (${scope}): "${candidates[0].title}" and ${candidates.length - 1} more. Ask the user to confirm, then call bulk_update_tasks again with confirmed: true.`,
+      };
+    }
+
+    let sprintId: any;
+    let sprintName: string | undefined;
+    if (args.setSprint) {
+      const s = await resolveSprint(ctx, args.setSprint, projectId);
+      if (!s.ok) return { error: s.error };
+      sprintId = s.id;
+      sprintName = s.name;
+    }
+
+    const patch: Record<string, unknown> = { updatedAt: Date.now() };
+    const changes: string[] = [];
+    if (args.setStatus) {
+      patch.status = normEnum(args.setStatus, TASK_STATUS, "todo");
+      changes.push(`status → ${patch.status}`);
+    }
+    if (args.setPriority) {
+      patch.priority = normEnum(args.setPriority, PRIORITY, "medium");
+      changes.push(`priority → ${patch.priority}`);
+    }
+    if (newAssigneeId) {
+      patch.assigneeId = newAssigneeId;
+      changes.push(`assignee → ${newAssigneeName}`);
+    }
+    if (sprintId) {
+      patch.sprintId = sprintId;
+      changes.push(`sprint → ${sprintName}`);
+    }
+
+    for (const task of candidates as any[]) {
+      await ctx.db.patch(task._id, patch);
+    }
+    const projectIdForLog = projectId ?? (candidates[0] as any).projectId;
+    await logActivity(
+      ctx,
+      actor,
+      projectIdForLog,
+      `updated ${candidates.length} task(s) (${changes.join(", ")}) via AIE Agent`,
+      "task",
+      candidates[0].title
+    );
+    return {
+      ok: true,
+      updatedCount: candidates.length,
+      scope,
+      changes: changes.join(", "),
+      tasks: candidates.slice(0, 10).map((t: any) => t.title),
+    };
+  },
+});
+
+/** Surfaces the app's own insights engine so the agent can explain *why* a board looks bad. */
+export const projectInsights = internalMutation({
+  args: { project: v.optional(v.string()) },
+  handler: async (ctx, args): Promise<Record<string, unknown>> => {
+    const resolved = await resolveProject(ctx, args.project);
+    if (!resolved.ok) return { error: resolved.error };
+    const insights = await ctx.runQuery(api.insights.generate, { projectId: resolved.id });
+    return { project: resolved.name, note: resolved.note, insights };
   },
 });

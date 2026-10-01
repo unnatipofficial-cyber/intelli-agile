@@ -273,6 +273,59 @@ const TOOLS = [
           required: ["project", "user"],
         },
       },
+      {
+        name: "add_team_member",
+        description:
+          "Add someone NEW to the workspace team, with optional job title, department, and the project to seat them on. Use this whenever the person is not yet a team member — it creates their profile instead of failing to find them.",
+        parameters: {
+          type: "OBJECT",
+          properties: {
+            name: { type: "STRING" },
+            email: { type: "STRING" },
+            jobTitle: { type: "STRING" },
+            department: { type: "STRING" },
+            project: { type: "STRING" },
+            role: { type: "STRING" },
+          },
+          required: ["name"],
+        },
+      },
+      {
+        name: "update_team_member",
+        description: "Update a team member's name, job title or department.",
+        parameters: {
+          type: "OBJECT",
+          properties: {
+            user: { type: "STRING" },
+            name: { type: "STRING" },
+            jobTitle: { type: "STRING" },
+            department: { type: "STRING" },
+          },
+          required: ["user"],
+        },
+      },
+      {
+        name: "remove_team_member",
+        description:
+          "DESTRUCTIVE. Removes a person from the workspace entirely: drops them from every project, unassigns their open tasks and deletes their profile. Requires confirmed: true after the user agrees.",
+        parameters: {
+          type: "OBJECT",
+          properties: {
+            user: { type: "STRING" },
+            confirmed: { type: "BOOLEAN" },
+          },
+          required: ["user"],
+        },
+      },
+      {
+        name: "mark_notifications_read",
+        description:
+          "Mark a person's notifications as read. Omit the name for the signed-in user.",
+        parameters: {
+          type: "OBJECT",
+          properties: { user: { type: "STRING" } },
+        },
+      },
 
       /* ── Tasks ── */
       {
@@ -468,7 +521,101 @@ const TOOLS = [
         },
       },
 
-      /* ── Risks ── */
+      /* ── Epics, stories, bulk edits, insights ── */
+      {
+        name: "update_epic",
+        description: "Change an epic's title, description, status or priority.",
+        parameters: {
+          type: "OBJECT",
+          properties: {
+            epic: { type: "STRING" },
+            project: { type: "STRING" },
+            title: { type: "STRING" },
+            description: { type: "STRING" },
+            status: { type: "STRING" },
+            priority: { type: "STRING" },
+          },
+          required: ["epic"],
+        },
+      },
+      {
+        name: "delete_epic",
+        description:
+          "DESTRUCTIVE-ish. Deletes an epic; its tasks and stories survive but become unassigned from it. Requires confirmed: true after the user agrees.",
+        parameters: {
+          type: "OBJECT",
+          properties: {
+            epic: { type: "STRING" },
+            project: { type: "STRING" },
+            confirmed: { type: "BOOLEAN" },
+          },
+          required: ["epic"],
+        },
+      },
+      {
+        name: "update_story",
+        description:
+          "Change a user story: title, description, acceptance criteria, status, priority, story points, assignee, epic, sprint or due date.",
+        parameters: {
+          type: "OBJECT",
+          properties: {
+            story: { type: "STRING" },
+            project: { type: "STRING" },
+            title: { type: "STRING" },
+            description: { type: "STRING" },
+            acceptanceCriteria: { type: "STRING" },
+            status: { type: "STRING" },
+            priority: { type: "STRING" },
+            storyPoints: { type: "NUMBER" },
+            assignee: { type: "STRING" },
+            sprint: { type: "STRING" },
+            epic: { type: "STRING" },
+            dueDate: { type: "STRING" },
+          },
+          required: ["story"],
+        },
+      },
+      {
+        name: "delete_story",
+        description:
+          "DESTRUCTIVE. Deletes a user story and detaches its tasks. Requires confirmed: true after the user agrees.",
+        parameters: {
+          type: "OBJECT",
+          properties: {
+            story: { type: "STRING" },
+            project: { type: "STRING" },
+            confirmed: { type: "BOOLEAN" },
+          },
+          required: ["story"],
+        },
+      },
+      {
+        name: "bulk_update_tasks",
+        description:
+          "Change many tasks at once using the match* filters, then apply set*. Use for sweeps like 'move every in-progress task in Apollo to review' or 'reassign all of Sarah's open work to James'. Requires confirmed: true after the user agrees.",
+        parameters: {
+          type: "OBJECT",
+          properties: {
+            project: { type: "STRING" },
+            assignee: { type: "STRING" },
+            matchTitle: { type: "STRING" },
+            matchStatus: { type: "STRING" },
+            matchPriority: { type: "STRING" },
+            matchType: { type: "STRING" },
+            setStatus: { type: "STRING" },
+            setPriority: { type: "STRING" },
+            setAssignee: { type: "STRING" },
+            setSprint: { type: "STRING" },
+            confirmed: { type: "BOOLEAN" },
+          },
+        },
+      },
+      {
+        name: "project_insights",
+        description:
+          "The app's own insight engine for a project: sprint health, velocity trend, workload imbalance, deadline pressure and risk exposure, each with a recommended action.",
+        parameters: NAMED,
+      },
       {
         name: "create_risk",
         description:
@@ -597,7 +744,13 @@ CORE BEHAVIOUR
 - When the user asks you to create, add, assign, start, move, close, log or set up anything, DO IT with the tools. Never produce a hypothetical example or a "here's how you could do it" plan.
 - When they ask a question — who is performing, what is at risk, how is a project going, what should I watch — CALL the read tools and answer with real numbers from the workspace. Never guess or invent metrics.
 - Chain tools freely in one turn: a request like "set up Apollo with Sarah and James, then give them the onboarding epic" may need create_project, add_project_member twice, then project_report to find the epic, then create_epic.
-- Prefer one bulk call over many repeats (create_tasks_bulk for five or more items).
+- Prefer one bulk call over many repeats (create_tasks_bulk for five or more items, bulk_update_tasks for a sweep across many tasks).
+
+PEOPLE — GET THIS RIGHT
+- The team is the list of user profiles. add_project_member and assign_task only work on people who ALREADY have a profile. If the user names someone new ("add Dana to the team", "invite Marcus as a backend dev"), call add_team_member with their name — and pass the project at the same time if they mentioned one, so one call does both.
+- Never tell the user a person "doesn't exist" or ask them to sign up first. Creating the profile is your job.
+- To take someone off a single project use remove_project_member. To take them off the workspace entirely (all projects, tasks unassigned, profile deleted) use remove_team_member, which is gated.
+- When handing out work, check their current load first (member_report or list_team) so you do not pile onto whoever already has the most open tasks.
 
 TYPO TOLERANCE — THIS IS CRITICAL
 - Users type fast and misspell constantly: "creat a projct called apolo", "asign sarah the onbaording flow", "mark teh design task don". You MUST still understand and act.
@@ -607,10 +760,11 @@ TYPO TOLERANCE — THIS IS CRITICAL
 - Only ask a clarifying question when the request is genuinely ambiguous — two different people with the same name, or no project at all. Never ask for a re-spelling.
 
 DESTRUCTIVE ACTIONS
-- delete_project, delete_task, delete_risk and remove_project_member are gated. Call them WITHOUT confirmed first; the response will contain needsConfirmation and a plain-English impact summary. Relay that summary and ask the user to confirm. Only when they clearly say yes, call the same tool again with confirmed: true.
-- Never set confirmed: true on the first call. Never delete or archive anything on your own initiative.
+- delete_project, delete_task, delete_risk, delete_epic, delete_story, remove_project_member, remove_team_member and bulk_update_tasks are gated. Call them WITHOUT confirmed first; the response will contain needsConfirmation and a plain-English impact summary. Relay that summary and ask the user to confirm. Only when they clearly say yes, call the same tool again with confirmed: true.
+- Never set confirmed: true on the first call. Never delete, archive, remove or bulk-edit anything on your own initiative.
 
 ANSWERING QUALITY
+- For "why is this project struggling" or "what's wrong", call project_insights alongside the report — it carries the app's own analysis and recommended actions.
 - Rank "best performers" by completed story points, then completed tasks, and state the basis you ranked on.
 - For a status or dashboard question, lead with the headline numbers, then the two or three things that actually need attention (overdue work, unassigned tasks, critical risks, slipping dates). Be concrete — name the project, task or person.
 - Use short paragraphs or bullet lists. No preamble like "Great question!".
@@ -768,8 +922,10 @@ export const agentLoop = internalAction({
           response = { error: String(err?.message ?? err).slice(0, 300) };
         }
         const trace = describeAction(call.name, call.args, response);
-        actions.push(trace);
-        if (trace.ok) summaries.push(trace.label);
+        if (!READ_ONLY_TOOLS.has(call.name)) {
+          actions.push(trace);
+          if (trace.ok) summaries.push(trace.label);
+        }
         responseParts.push({
           functionResponse: { name: call.name, response },
         });
@@ -788,6 +944,28 @@ export const agentLoop = internalAction({
 });
 
 /* ── Tool execution: model names → internal functions ──────────── */
+
+/**
+ * Read-only tools are the agent's eyes, not its hands — they stay out of the
+ * user-facing action trace so it only shows real changes.
+ */
+const READ_ONLY_TOOLS = new Set([
+  "list_projects",
+  "workspace_dashboard",
+  "project_report",
+  "list_team",
+  "top_performers",
+  "member_report",
+  "sprint_report",
+  "backlog_report",
+  "task_detail",
+  "list_risks",
+  "activity_feed",
+  "time_entries",
+  "retrospectives",
+  "notifications",
+  "project_insights",
+]);
 
 /** Drop undefined/empty keys so Convex arg validators see a clean object. */
 function compact(source: Record<string, unknown>): Record<string, unknown> {
@@ -834,6 +1012,16 @@ async function runTool(
     endDate: str(rawArgs.endDate),
     dueDate: str(rawArgs.dueDate),
     title: str(rawArgs.title),
+    matchTitle: str(rawArgs.matchTitle ?? rawArgs.title),
+    matchStatus: str(rawArgs.matchStatus),
+    matchPriority: str(rawArgs.matchPriority),
+    matchType: str(rawArgs.matchType),
+    setStatus: str(rawArgs.setStatus),
+    setPriority: str(rawArgs.setPriority),
+    setAssignee: str(rawArgs.setAssignee),
+    setSprint: str(rawArgs.setSprint),
+    jobTitle: str(rawArgs.jobTitle),
+    department: str(rawArgs.department),
     labels: Array.isArray(rawArgs.labels) ? rawArgs.labels.map(String) : undefined,
     wentWell: Array.isArray(rawArgs.wentWell) ? rawArgs.wentWell.map(String) : undefined,
     toImprove: Array.isArray(rawArgs.toImprove) ? rawArgs.toImprove.map(String) : undefined,
@@ -934,6 +1122,33 @@ async function runTool(
         project: String(args.project),
         user: String(args.user),
         confirmed: args.confirmed,
+      });
+
+    /* Team membership */
+    case "add_team_member":
+      return await ctx.runMutation(internal.agentTools.addTeamMember, {
+        name: String(args.name ?? args.title ?? ""),
+        email: str(rawArgs.email),
+        jobTitle: args.jobTitle,
+        department: args.department,
+        project: args.project,
+        role: args.role,
+      });
+    case "update_team_member":
+      return await ctx.runMutation(internal.agentTools.updateTeamMember, {
+        user: String(args.user),
+        name: args.newName ?? args.name,
+        jobTitle: args.jobTitle,
+        department: args.department,
+      });
+    case "remove_team_member":
+      return await ctx.runMutation(internal.agentTools.removeTeamMember, {
+        user: String(args.user),
+        confirmed: args.confirmed,
+      });
+    case "mark_notifications_read":
+      return await ctx.runMutation(internal.agentTools.markNotificationsRead, {
+        user: args.user,
       });
 
     /* Tasks */
@@ -1046,6 +1261,62 @@ async function runTool(
         dueDate: args.dueDate,
       });
 
+    /* Epics, stories, bulk edits, insights */
+    case "update_epic":
+      return await ctx.runMutation(internal.agentTools.updateEpic, {
+        epic: String(args.epic),
+        project: args.project,
+        title: args.newName ?? args.title,
+        description: args.description,
+        status: args.status,
+        priority: args.priority,
+      });
+    case "delete_epic":
+      return await ctx.runMutation(internal.agentTools.deleteEpic, {
+        epic: String(args.epic),
+        project: args.project,
+        confirmed: args.confirmed,
+      });
+    case "update_story":
+      return await ctx.runMutation(internal.agentTools.updateStory, {
+        story: String(args.story),
+        project: args.project,
+        title: args.newName ?? args.title,
+        description: args.description,
+        acceptanceCriteria: args.acceptanceCriteria,
+        status: args.status,
+        priority: args.priority,
+        storyPoints: args.storyPoints,
+        assignee: args.user,
+        sprint: args.sprint,
+        epic: args.epic,
+        dueDate: args.dueDate,
+      });
+    case "delete_story":
+      return await ctx.runMutation(internal.agentTools.deleteStory, {
+        story: String(args.story),
+        project: args.project,
+        confirmed: args.confirmed,
+      });
+    case "bulk_update_tasks":
+      return await ctx.runMutation(internal.agentTools.bulkUpdateTasks, {
+        project: args.project,
+        assignee: args.user,
+        matchTitle: args.matchTitle,
+        matchStatus: args.matchStatus,
+        matchPriority: args.matchPriority,
+        matchType: args.matchType,
+        setStatus: args.setStatus,
+        setPriority: args.setPriority,
+        setAssignee: args.setAssignee,
+        setSprint: args.setSprint,
+        confirmed: args.confirmed,
+      });
+    case "project_insights":
+      return await ctx.runMutation(internal.agentTools.projectInsights, {
+        project: args.project,
+      });
+
     /* Risks */
     case "create_risk":
       return await ctx.runMutation(internal.agentTools.createRisk, {
@@ -1137,10 +1408,52 @@ function describeAction(
         : `Created project "${response.name}".`,
     };
   }
-  if (name === "update_project" || name === "update_task" || name === "update_sprint" || name === "update_risk") {
+  if (name.startsWith("update_")) {
     const changes = Array.isArray(response.changes) ? response.changes.join(", ") : "updated";
-    const target = response.projectName ?? response.taskTitle ?? response.sprintName ?? response.riskTitle ?? "";
+    const target =
+      response.projectName ??
+      response.taskTitle ??
+      response.sprintName ??
+      response.riskTitle ??
+      response.epicTitle ??
+      response.storyTitle ??
+      response.userName ??
+      "";
     return { tool: name, ok: true, label: `${target}: ${changes}.` };
+  }
+  if (name === "add_team_member") {
+    return {
+      tool: name,
+      ok: true,
+      label: `${response.alreadyExisted ? "Updated" : "Added"} ${response.userName} to the team${response.project ? ` and to ${response.project}` : ""}.`,
+    };
+  }
+  if (name === "remove_team_member") {
+    return {
+      tool: name,
+      ok: true,
+      label: `Removed ${response.userName} from the team — left ${(response.projectsLeft as unknown[] | undefined)?.length ?? 0} project(s), ${response.tasksUnassigned} task(s) unassigned.`,
+    };
+  }
+  if (name === "mark_notifications_read") {
+    return {
+      tool: name,
+      ok: true,
+      label: `Marked ${response.markedRead} notification(s) read for ${response.userName}.`,
+    };
+  }
+  if (name === "delete_epic") {
+    return { tool: name, ok: true, label: `Deleted epic "${response.deleted}".` };
+  }
+  if (name === "delete_story") {
+    return { tool: name, ok: true, label: `Deleted story "${response.deleted}".` };
+  }
+  if (name === "bulk_update_tasks") {
+    return {
+      tool: name,
+      ok: true,
+      label: `Updated ${response.updatedCount} task(s) (${response.changes}).`,
+    };
   }
   if (name === "add_project_member") {
     return {
