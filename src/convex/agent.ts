@@ -24,6 +24,7 @@ import { internalAction, action } from "./_generated/server";
 import { v } from "convex/values";
 import { api, internal } from "./_generated/api";
 import { briefingKey, type BriefKind } from "./briefingKey";
+import { normEnum } from "./fuzzy";
 
 const MODELS = [
   "gemini-3-flash-preview",
@@ -763,6 +764,29 @@ const TOOLS = [
           required: ["schedule"],
         },
       },
+      /* ── The interface itself ── */
+      {
+        name: "set_theme",
+        description:
+          "Change the app's appearance on the user's screen. mode = light or dark. appTheme = graphite (default), modern-minimal, or darkmatter. Use this whenever they ask to switch, change or set the theme.",
+        parameters: {
+          type: "OBJECT",
+          properties: {
+            mode: { type: "STRING" },
+            appTheme: { type: "STRING" },
+          },
+        },
+      },
+      {
+        name: "open_page",
+        description:
+          "Navigate the user to a page. page = dashboard, projects, tasks, backlog, sprint-board, team, risks, analytics, reports or settings. Use it when they ask to see or be taken to something.",
+        parameters: {
+          type: "OBJECT",
+          properties: { page: { type: "STRING" } },
+          required: ["page"],
+        },
+      },
       {
         name: "create_retrospective",
         description: "File a sprint retrospective with what went well, what to improve and action items.",
@@ -839,13 +863,44 @@ const LIVE_STATE_PREAMBLE = `
 CURRENT WORKSPACE STATE (computed just now — prefer this over your memory):
 `;
 
-/* ── Gemini call with model fallback ───────────────────────────── */
+/* ── Gemini call with model fallback ───────────────────��───────── */
+
+export interface GeminiOptions {
+  /**
+   * Function declarations to expose. OMIT THIS ONLY for the short-form calls
+   * (page briefings, scheduled digests) that are meant to be pure prose —
+   * the agent loop must always pass TOOLS, or the model has no way to act and
+   * will just answer in text.
+   */
+  tools?: unknown[];
+  system?: string;
+  /** Force a function call instead of letting the model reply in prose. */
+  forceTools?: boolean;
+}
+
+/**
+ * A turn that produced neither readable text nor a tool call is useless. On a
+ * reasoning model this usually means the output budget was spent thinking, so
+ * we treat it as a failure and fall through to the next model instead of
+ * surfacing an empty answer to the user.
+ */
+function isDegenerate(data: any): boolean {
+  const parts = (data?.candidates?.[0]?.content?.parts ?? []) as any[];
+  if (!parts.length) return true;
+  const hasText = parts.some(
+    (p) => typeof p.text === "string" && p.text.trim().length > 0
+  );
+  const hasCall = parts.some((p) => !!p.functionCall);
+  return !hasText && !hasCall;
+}
 
 async function callGemini(
   apiKey: string,
   contents: GeminiContent[],
-  options?: { tools?: unknown[]; system?: string }
+  options: GeminiOptions = {}
 ): Promise<any> {
+  let lastProblem = "no response";
+
   for (const model of MODELS) {
     for (let attempt = 0; attempt < 2; attempt += 1) {
       try {
@@ -855,15 +910,22 @@ async function callGemini(
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             contents,
-            ...(options?.tools ? { tools: options.tools } : {}),
+            ...(options.tools ? { tools: options.tools } : {}),
+            ...(options.forceTools
+              ? { toolConfig: { functionCallingConfig: { mode: "ANY" } } }
+              : {}),
             systemInstruction: {
-              parts: [{ text: options?.system ?? SYSTEM_PROMPT }],
+              parts: [{ text: options.system ?? SYSTEM_PROMPT }],
             },
-            generationConfig: { maxOutputTokens: 4096, temperature: 0.3 },
+            generationConfig: {
+              maxOutputTokens: 8192,
+              temperature: 0.3,
+            },
           }),
         });
 
         if (response.status === 503 || response.status === 429) {
+          lastProblem = `HTTP ${response.status}`;
           await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
           continue;
         }
@@ -873,17 +935,54 @@ async function callGemini(
             `Gemini API error: ${response.status} - ${errText.slice(0, 200)}`
           );
         }
-        return await response.json();
-      } catch (err) {
-        if (attempt === 1) {
-          if (model === MODELS[MODELS.length - 1]) throw err;
+
+        const data = await response.json();
+        if (isDegenerate(data)) {
+          lastProblem = `empty response (finishReason: ${
+            data?.candidates?.[0]?.finishReason ?? "unknown"
+          })`;
           break; // move to the next model
         }
+        return data;
+      } catch (err) {
+        lastProblem = String((err as any)?.message ?? err).slice(0, 200);
+        if (attempt === 1) break; // move to the next model
         await new Promise((r) => setTimeout(r, 800));
       }
     }
   }
-  throw new Error("All Gemini models are temporarily unavailable.");
+
+  throw new Error(
+    `Every Gemini model failed or returned nothing usable — ${lastProblem}.`
+  );
+}
+
+/** Parts of one model response, with degenerate responses already rejected. */
+async function requestParts(
+  apiKey: string,
+  contents: GeminiContent[],
+  system: string,
+  forceTools = false
+): Promise<GeminiPart[]> {
+  const data = await callGemini(apiKey, contents, {
+    tools: TOOLS,
+    system,
+    forceTools,
+  });
+  return (data?.candidates?.[0]?.content?.parts ?? []) as GeminiPart[];
+}
+
+/**
+ * Recognises a model that narrated an action instead of taking it — "Done.",
+ * "Added.", "Sure, created." — with no tool actually run. This is the failure
+ * we used to show the user verbatim.
+ */
+function looksLikeUnearnedSuccess(text: string): boolean {
+  const reply = text.trim();
+  if (reply.length === 0 || reply.length > 28) return false;
+  return /^(done|ok|okay|sure|got it|alright|created|added|assigned|updated|removed|deleted|completed|finished|will do)\b/i.test(
+    reply
+  );
 }
 
 /* ── Main action ───────────────────────────────────────────────── */
@@ -895,10 +994,96 @@ export interface AgentAction {
   ok: boolean;
 }
 
+/**
+ * An instruction the browser has to carry out, because it lives in client
+ * state rather than the database: switching the theme, or navigating to a page.
+ */
+export interface ClientAction {
+  type: "set_theme" | "open_page";
+  mode?: "light" | "dark";
+  appTheme?: "graphite" | "modern-minimal" | "darkmatter";
+  path?: string;
+  label: string;
+}
+
 /** Shape of every agent response, for both the loop and its public wrapper. */
 export interface AgentReply {
   reply: string;
   actions: AgentAction[];
+  clientActions: ClientAction[];
+}
+
+/**
+ * Tools that only the browser can perform. The model calls them like any other
+ * tool, but instead of a Convex mutation they produce a ClientAction the dock
+ * applies on the user's screen.
+ */
+const CLIENT_TOOLS = new Set(["set_theme", "open_page"]);
+
+const PAGE_ROUTES: Record<string, string> = {
+  dashboard: "/dashboard",
+  home: "/dashboard",
+  projects: "/dashboard/projects",
+  tasks: "/dashboard/tasks",
+  backlog: "/dashboard/backlog",
+  sprint: "/dashboard/sprint-board",
+  "sprint board": "/dashboard/sprint-board",
+  board: "/dashboard/sprint-board",
+  team: "/dashboard/team",
+  risks: "/dashboard/risks",
+  analytics: "/dashboard/analytics",
+  reports: "/dashboard/reports",
+  settings: "/dashboard/settings",
+};
+
+function buildClientAction(
+  name: string,
+  rawArgs: Record<string, unknown>
+): ClientAction | null {
+  if (name === "set_theme") {
+    const appTheme = normEnum(
+      rawArgs.appTheme ?? rawArgs.theme,
+      ["graphite", "modern-minimal", "darkmatter"] as const,
+      "graphite"
+    );
+    const modeRaw = String(rawArgs.mode ?? "").toLowerCase();
+    const mode =
+      modeRaw === "light" || modeRaw === "dark"
+        ? modeRaw
+        : String(rawArgs.dark ?? "").toLowerCase().includes("dark")
+          ? "dark"
+          : undefined;
+    const themeLabel =
+      appTheme === "modern-minimal"
+        ? "Modern Minimal"
+        : appTheme === "darkmatter"
+          ? "Darkmatter"
+          : "Graphite";
+    return {
+      type: "set_theme",
+      appTheme,
+      mode,
+      label: mode
+        ? `Switched to ${themeLabel} in ${mode} mode.`
+        : `Switched to the ${themeLabel} theme.`,
+    };
+  }
+
+  if (name === "open_page") {
+    const requested = String(rawArgs.page ?? rawArgs.path ?? "").toLowerCase().trim();
+    const path =
+      PAGE_ROUTES[requested] ??
+      (requested.startsWith("/dashboard") ? requested : undefined);
+    if (!path) return null;
+    const label = path.replace("/dashboard", "").replace(/^\//, "") || "dashboard";
+    return {
+      type: "open_page",
+      path,
+      label: `Opened the ${label} page.`,
+    };
+  }
+
+  return null;
 }
 
 /**
@@ -922,6 +1107,7 @@ export const agentLoop = internalAction({
         reply:
           "GOOGLE_AI_API_KEY is not configured. Add it in Convex Settings → Environment Variables, then try again.",
         actions: [] as AgentAction[],
+        clientActions: [] as ClientAction[],
       };
     }
 
@@ -945,40 +1131,75 @@ export const agentLoop = internalAction({
     }
 
     const actions: AgentAction[] = [];
+    const clientActions: ClientAction[] = [];
     const summaries: string[] = [];
+    const lastUserMessage =
+      args.messages[args.messages.length - 1]?.content ?? "";
 
     for (let step = 0; step < MAX_STEPS; step += 1) {
-      let data: any;
+      let parts: GeminiPart[];
       try {
-        data = await callGemini(apiKey, contents, { system: liveSystem });
+        parts = await requestParts(apiKey, contents, liveSystem);
       } catch (err: any) {
         return {
           reply:
             summaries.length > 0
               ? `${summaries.join(" ")} (I hit an API error before I could summarise: ${String(err?.message ?? err).slice(0, 200)})`
-              : `I hit an error talking to the model: ${String(err?.message ?? err).slice(0, 300)}`,
+              : `I couldn't reach the model, so nothing was changed: ${String(err?.message ?? err).slice(0, 300)}`,
           actions,
+          clientActions,
         };
       }
 
-      const candidate = data.candidates?.[0];
-      const parts: GeminiPart[] = candidate?.content?.parts ?? [];
+      const parse = (source: GeminiPart[]) => {
+        const calls: ToolCall[] = [];
+        let text = "";
+        for (const part of source) {
+          if (part.functionCall) {
+            calls.push({
+              name: part.functionCall.name,
+              args: part.functionCall.args ?? {},
+            });
+          } else if (typeof part.text === "string") {
+            text += part.text;
+          }
+        }
+        return { calls, text };
+      };
 
-      const calls: ToolCall[] = [];
-      let text = "";
-      for (const part of parts) {
-        if (part.functionCall) {
-          calls.push({
-            name: part.functionCall.name,
-            args: part.functionCall.args ?? {},
-          });
-        } else if (typeof part.text === "string") {
-          text += part.text;
+      let { calls, text } = parse(parts);
+
+      // The model sometimes narrates an action ("Done.", "Added her.") instead
+      // of taking it. On the opening turn that is never legitimate, so retry
+      // once with function calling forced rather than reporting a success that
+      // never happened.
+      if (calls.length === 0 && step === 0 && actions.length === 0 &&
+          looksLikeUnearnedSuccess(text)) {
+        const forced = [...contents];
+        forced[forced.length - 1] = {
+          role: "user",
+          parts: [
+            {
+              text: `${lastUserMessage}\n\nThat was not actually performed. Call the tool that does it now, and do not reply until the tool has returned.`,
+            },
+          ],
+        };
+        try {
+          parts = await requestParts(apiKey, forced, liveSystem, true);
+          ({ calls, text } = parse(parts));
+        } catch (err) {
+          console.error("Forced tool retry failed:", err);
         }
       }
 
       if (calls.length === 0) {
-        return { reply: text.trim() || "Done.", actions };
+        return {
+          reply:
+            text.trim() ||
+            "I couldn't work out how to do that, and nothing was changed. Try naming the thing to act on — a project, a task, or a person.",
+          actions,
+          clientActions,
+        };
       }
 
       // Record + execute each tool call, then feed results back.
@@ -994,6 +1215,21 @@ export const agentLoop = internalAction({
           });
           continue;
         }
+
+        // Browser-side tools: hand back an instruction instead of mutating.
+        const clientAction = CLIENT_TOOLS.has(call.name)
+          ? buildClientAction(call.name, call.args)
+          : null;
+        if (clientAction) {
+          clientActions.push(clientAction);
+          actions.push({ tool: call.name, ok: true, label: clientAction.label });
+          summaries.push(clientAction.label);
+          responseParts.push({
+            functionResponse: { name: call.name, response: { ok: true } },
+          });
+          continue;
+        }
+
         let response: Record<string, unknown>;
         try {
           response = await runTool(ctx, call.name, call.args);
@@ -1018,6 +1254,7 @@ export const agentLoop = internalAction({
           ? `${summaries.join(" ")} (I stopped there — ask me to continue if anything is missing.)`
           : "I worked through several steps without a final answer. Could you rephrase that?",
       actions,
+      clientActions,
     };
   },
 });
@@ -1597,6 +1834,10 @@ async function runTool(
         toImprove: args.toImprove,
         actionItems: args.actionItems,
       });
+    case "set_theme":
+    case "open_page":
+      // Handled on the client; see CLIENT_TOOLS in the agent loop.
+      return { error: "This tool is applied in the browser, not the database." };
     default:
       return { error: `Unknown tool ${name}` };
   }
@@ -1673,6 +1914,11 @@ function describeAction(
       ok: true,
       label: `Updated ${response.updatedCount} task(s) (${response.changes}).`,
     };
+  }
+  if (name === "set_theme" || name === "open_page") {
+    // Reached only if a browser-side tool somehow reached the executor; the
+    // loop normally handles these before runTool.
+    return { tool: name, ok: true, label: `${name} applied.` };
   }
   if (name === "create_schedule") {
     return {

@@ -1,9 +1,11 @@
 import { useState, useRef, useEffect } from "react";
 import { useAction } from "convex/react";
+import { useNavigate } from "react-router";
 import { api } from "../convex/_generated/api";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { AGENT_OPEN_EVENT, type OpenAgentDetail } from "@/lib/aie-bus";
+import { useTheme, type AppTheme, type ThemeMode } from "@/hooks/use-theme";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -21,6 +23,15 @@ interface AgentAction {
   tool: string;
   label: string;
   ok: boolean;
+}
+
+/** Instructions the agent hands to the browser — theme, navigation. */
+interface ClientAction {
+  type: "set_theme" | "open_page";
+  mode?: ThemeMode;
+  appTheme?: AppTheme;
+  path?: string;
+  label: string;
 }
 
 interface Message {
@@ -62,6 +73,21 @@ export default function AIChat() {
 
   const [thinkingIndex, setThinkingIndex] = useState(0);
   const chatAction = useAction(api.agent.chat);
+  const navigate = useNavigate();
+  const { theme, setAppTheme, toggleTheme } = useTheme();
+
+  /** Applies the browser-side half of a reply: theme switches and navigation. */
+  const applyClientActions = (incoming: ClientAction[]) => {
+    for (const action of incoming ?? []) {
+      if (action.type === "set_theme") {
+        if (action.appTheme) setAppTheme(action.appTheme);
+        // Mode is binary in the provider, so flipping is the only move.
+        if (action.mode && action.mode !== theme) toggleTheme();
+      } else if (action.type === "open_page" && action.path) {
+        navigate(action.path);
+      }
+    }
+  };
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -115,6 +141,7 @@ export default function AIChat() {
           actions: response.actions.length > 0 ? response.actions : undefined,
         },
       ]);
+      applyClientActions(response.clientActions as ClientAction[]);
     } catch (err) {
       console.error("Chat error:", err);
       setMessages([
