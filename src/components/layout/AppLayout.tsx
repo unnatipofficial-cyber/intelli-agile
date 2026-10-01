@@ -123,7 +123,9 @@ export default function AppLayout({ children }: { children: ReactNode }) {
       <TopBar />
 
       {/* Page content */}
-      <main className="p-4 lg:p-6 pb-24 md:pb-8">
+      {/* pb-28 clears the fixed dock (64px tall + 24px offset) on every
+          breakpoint — the old `md:pb-8` let the last row sit under it. */}
+      <main className="p-4 lg:p-6 pb-28">
         {children}
       </main>
 
@@ -136,15 +138,18 @@ export default function AppLayout({ children }: { children: ReactNode }) {
       </ErrorBoundary>
 
       {/* Floating dock — anchored to bottom */}
-      <div className="fixed bottom-0 left-0 right-0 z-30 flex justify-center pointer-events-none">
-        <div className="pointer-events-auto pb-4 md:pb-6">
+      <nav
+        aria-label="Primary"
+        className="fixed bottom-0 left-0 right-0 z-30 flex justify-center pointer-events-none"
+      >
+        <div className="pointer-events-auto pb-4 lg:pb-6">
           <FloatingDock
             items={dockNavItems}
             activePath={location.pathname}
             onNavigate={(path) => navigate(path)}
           />
         </div>
-      </div>
+      </nav>
     </div>
   );
 }
