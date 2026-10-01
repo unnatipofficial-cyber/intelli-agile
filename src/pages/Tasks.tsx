@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import type { ComponentType } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../convex/_generated/api";
+import IntelligencePanel from "@/components/IntelligencePanel";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
@@ -368,6 +369,8 @@ export default function Tasks() {
           </DropdownMenu>
         </div>
       </div>
+
+      <IntelligencePanel kind="tasks" />
 
       {/* Stats */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../convex/_generated/api";
+import IntelligencePanel from "@/components/IntelligencePanel";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -186,6 +187,8 @@ export default function Projects() {
           <Plus className="w-4 h-4" /> New Project
         </Button>
       </div>
+
+      <IntelligencePanel kind="dashboard" />
 
       {/* Search */}
       <div className="relative max-w-sm">

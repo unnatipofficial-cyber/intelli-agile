@@ -291,6 +291,116 @@ function points(items: { storyPoints?: number }[]): number {
    READ TOOLS
    ═══════════════════════════════════════════════════════════════ */
 
+/**
+ * A compact, always-current picture of the workspace, injected into the
+ * agent's instructions on every turn. It costs one query and means the model
+ * can talk about reality ("three tasks are overdue") without spending a tool
+ * round trip, and that it grounds follow-ups like "the Apollo one" correctly.
+ */
+export const workspaceSnapshot = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    const now = Date.now();
+    const today = isoToday(now);
+    const [projects, tasks, risks, sprints, users] = await Promise.all([
+      ctx.db.query("projects").collect(),
+      ctx.db.query("tasks").collect(),
+      ctx.db.query("risks").collect(),
+      ctx.db.query("sprints").collect(),
+      ctx.db.query("users").collect(),
+    ]);
+    const projectNames = new Map(projects.map((p: any) => [p._id, p.name as string]));
+    const userNames = new Map(users.map((u: any) => [u._id, (u.name ?? u.email ?? "Unknown") as string]));
+
+    const open = tasks.filter((t: any) => t.status !== "done");
+    const overdue = open.filter((t: any) => t.dueDate && t.dueDate < now);
+    const criticalRisks = risks.filter(
+      (r: any) => r.status === "open" && (r.severity === "critical" || r.score >= 16)
+    );
+
+    const team = users
+      .map((u: any) => {
+        const mine = tasks.filter((t: any) => t.assigneeId === u._id);
+        const openMine = mine.filter((t: any) => t.status !== "done");
+        return {
+          name: (u.name ?? u.email ?? "Unknown") as string,
+          jobTitle: u.jobTitle ?? null,
+          openTasks: openMine.length,
+          openPoints: openMine.reduce((s: number, t: any) => s + (t.storyPoints ?? 0), 0),
+          overdueTasks: openMine.filter((t: any) => t.dueDate && t.dueDate < now).length,
+        };
+      })
+      .sort((a, b) => b.openPoints - a.openPoints);
+
+    const needsAttention: string[] = [];
+    if (overdue.length) {
+      needsAttention.push(
+        `${overdue.length} overdue task(s), oldest "${overdue
+          .slice()
+          .sort((a: any, b: any) => a.dueDate - b.dueDate)[0].title}"`
+      );
+    }
+    const unassigned = open.filter((t: any) => !t.assigneeId).length;
+    if (unassigned) needsAttention.push(`${unassigned} open task(s) with no owner`);
+    if (criticalRisks.length) {
+      needsAttention.push(
+        `${criticalRisks.length} critical risk(s): ${criticalRisks.slice(0, 2).map((r: any) => r.title).join(", ")}`
+      );
+    }
+    const topLoader = team[0];
+    if (topLoader && topLoader.openPoints > 0) {
+      needsAttention.push(`${topLoader.name} is the most loaded with ${topLoader.openPoints} open story points`);
+    }
+
+    return {
+      date: today,
+      projects: projects.map((p: any) => {
+        const mine = tasks.filter((t: any) => t.projectId === p._id);
+        const doneCount = mine.filter((t: any) => t.status === "done").length;
+        return {
+          name: p.name,
+          status: p.status,
+          priority: p.priority,
+          progressPercent: mine.length ? Math.round((doneCount / mine.length) * 100) : 0,
+          openTasks: mine.length - doneCount,
+          endDate: p.endDate ?? null,
+          isLate: p.status === "active" && !!p.endDate && p.endDate < today,
+        };
+      }),
+      totals: {
+        projects: projects.length,
+        people: users.length,
+        openTasks: open.length,
+        completedTasks: tasks.length - open.length,
+        overdueTasks: overdue.length,
+        unassignedOpenTasks: unassigned,
+        openBugs: open.filter((t: any) => t.type === "bug").length,
+        openRisks: risks.filter((r: any) => r.status === "open").length,
+        criticalRisks: criticalRisks.length,
+      },
+      activeSprints: sprints
+        .filter((s: any) => s.status === "active")
+        .map((s: any) => ({
+          name: s.name,
+          project: projectNames.get(s.projectId) ?? "Unknown",
+          daysLeft: Math.round((s.endDate - now) / 86400000),
+        })),
+      overdueTasks: overdue
+        .slice()
+        .sort((a: any, b: any) => a.dueDate - b.dueDate)
+        .slice(0, 5)
+        .map((t: any) => ({
+          title: t.title,
+          project: projectNames.get(t.projectId) ?? "Unknown",
+          daysLate: Math.round((now - t.dueDate) / 86400000),
+          assignee: t.assigneeId ? userNames.get(t.assigneeId) : null,
+        })),
+      team,
+      needsAttention,
+    };
+  },
+});
+
 export const listProjects = internalQuery({
   args: {},
   handler: async (ctx) => {

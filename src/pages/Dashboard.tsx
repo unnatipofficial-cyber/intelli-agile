@@ -3,7 +3,6 @@ import { useState, useEffect, useMemo } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../convex/_generated/api";
 import { useAuth } from "@/hooks/use-auth";
-import { useAiInsights } from "@/hooks/use-ai-insights";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { insightSeverityStyles } from "@/lib/badge-colors";
@@ -12,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import ActivityFeed from "@/components/ActivityFeed";
 import SprintForecast from "@/components/SprintForecast";
+import IntelligencePanel from "@/components/IntelligencePanel";
 import {
   FolderKanban,
   Zap,
@@ -95,19 +95,6 @@ function KpiCard({
 
 function AieInsights({ projectId, allTasks, sprints, risks, workload }: { projectId: any; allTasks: any[]; sprints: any[]; risks: any[]; workload: any[] }) {
   const insights = useQuery(api.insights.generate, projectId ? { projectId } : "skip");
-  const { aiInsights, isLoading: aiLoading, error: aiError, analyzeProject } = useAiInsights();
-  const [aiAnalyzed, setAiAnalyzed] = useState(false);
-
-  const handleAnalyze = async () => {
-    await analyzeProject({
-      projectName: "Current Project",
-      tasks: allTasks?.map((t: any) => ({ title: t.title, status: t.status, priority: t.priority, storyPoints: t.storyPoints || 0 })) || [],
-      sprints: sprints?.map((s: any) => ({ name: s.name, status: s.status, totalPoints: s.totalPoints || 0, completedPoints: s.completedPoints || 0 })) || [],
-      risks: risks?.map((r: any) => ({ title: r.title, severity: r.severity, probability: r.probability, impact: r.impact, score: r.score, status: r.status })) || [],
-      teamWorkload: workload?.map((w: any) => ({ name: w.user?.name || "Unknown", activePoints: w.activePoints || 0, completedPoints: w.completedPoints || 0 })) || [],
-    });
-    setAiAnalyzed(true);
-  };
 
   if (!insights) {
     return (
@@ -158,18 +145,16 @@ function AieInsights({ projectId, allTasks, sprints, risks, workload }: { projec
               <Sparkles className="w-3 h-3 mr-1" />
               {insights.length} rule{insights.length !== 1 ? "s" : ""}
             </Badge>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={handleAnalyze}
-              disabled={aiLoading}
-              className="h-7 text-[10px] gap-1.5 border-primary/20 hover:bg-primary/5"
-            >
-              <Brain className="w-3 h-3" />
-              {aiLoading ? "Analyzing..." : "Analyze with AI"}
-            </Button>
           </div>
         </div>
+
+        {/* Ambient AI read-out — no click required. */}
+        <IntelligencePanel
+          kind={projectId ? "project" : "dashboard"}
+          projectId={projectId ?? undefined}
+          hideScope
+          className="mb-5 bg-background/40"
+        />
 
         <div className="space-y-3">
           {insights.slice(0, 5).map((insight) => {
@@ -206,60 +191,7 @@ function AieInsights({ projectId, allTasks, sprints, risks, workload }: { projec
           })}
         </div>
 
-        {/* AI-Powered Insights from Claude */}
-        {aiAnalyzed && aiInsights.length > 0 && (
-          <div className="mt-5 pt-5 border-t border-border/50">
-            <div className="flex items-center gap-2 mb-3">
-              <Brain className="w-4 h-4 text-primary" />
-              <span className="text-xs font-bold tracking-tight">Claude AI Analysis</span>
-              <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 border-primary/20 text-primary">
-                {aiInsights.length} insight{aiInsights.length !== 1 ? "s" : ""}
-              </Badge>
-            </div>
-            <div className="space-y-3">
-              {aiInsights.map((insight: any, i: number) => {
-                const sev = getSeverityStyle(insight.severity);
-                const IconComp = severityIcons[insight.severity] || Timer;
-                return (
-                  <motion.div
-                    key={`ai-${i}`}
-                    initial={{ opacity: 0, x: -8 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: i * 0.05 }}
-                    className="rounded-xl border p-4 transition-colors"
-                    style={{ backgroundColor: sev.bg, borderColor: sev.border }}
-                  >
-                    <div className="flex items-start gap-3">
-                      <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: sev.bg }}>
-                        <IconComp className="w-4 h-4" style={{ color: sev.text }} />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1">
-                          <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 capitalize" style={{ color: sev.text, borderColor: sev.border }}>
-                            {insight.severity}
-                          </Badge>
-                          <span className="text-sm font-semibold">{insight.title}</span>
-                        </div>
-                        <p className="text-xs text-muted-foreground leading-relaxed">{insight.description}</p>
-                        <div className="mt-2 flex items-center gap-1.5">
-                          <ArrowRight className="w-3 h-3 text-primary" />
-                          <p className="text-xs font-medium text-primary">{insight.recommendedAction}</p>
-                        </div>
-                      </div>
-                    </div>
-                  </motion.div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {aiError && (
-          <div className="mt-4 p-3 rounded-xl" style={{ backgroundColor: insightSeverityStyles.critical.bg, borderColor: insightSeverityStyles.critical.border, borderWidth: 1, borderStyle: "solid" }}>
-            <p className="text-xs" style={{ color: insightSeverityStyles.critical.text }}>AI analysis failed: {aiError}</p>
-          </div>
-        )}
-      </div>
+        </div>
     </div>
   );
 }

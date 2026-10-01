@@ -22,7 +22,8 @@
 
 import { internalAction, action } from "./_generated/server";
 import { v } from "convex/values";
-import { internal } from "./_generated/api";
+import { api, internal } from "./_generated/api";
+import { briefingKey, type BriefKind } from "./briefingKey";
 
 const MODELS = [
   "gemini-3-flash-preview",
@@ -826,7 +827,17 @@ ANSWERING QUALITY
 FACTS
 - Today is ${new Date().toISOString().slice(0, 10)}. Dates accept YYYY-MM-DD or loose forms like "Dec 15", "next friday", "in 3 days".
 - If a tool response contains an error or needsConfirmation, deal with it honestly. Never claim something succeeded when it did not, and never invent ids.
-- When no tool is needed (pure agile coaching, definitions, process advice), answer directly and concisely.`;
+- When no tool is needed (pure agile coaching, definitions, process advice), answer directly and concisely.
+
+LIVE WORKSPACE STATE
+- Each turn begins with a snapshot of the workspace computed moments before you were called. Treat it as ground truth and use its names exactly when the user refers to something loosely ("the Apollo one", "that sprint", "who's behind").
+- Use it to answer obvious status questions immediately. Still call a read tool whenever the user wants detail, history, or anything not in the snapshot.
+- If the user asks "what should I do next", the snapshot's needsAttention list is the shortlist — answer from it in plain language rather than calling a tool for no reason.`;
+
+const LIVE_STATE_PREAMBLE = `
+
+CURRENT WORKSPACE STATE (computed just now — prefer this over your memory):
+`;
 
 /* ── Gemini call with model fallback ───────────────────────────── */
 
@@ -922,13 +933,24 @@ export const agentLoop = internalAction({
       });
     }
 
+    // Ground the turn in reality. One extra query buys the model the whole
+    // workspace up front, so it can name projects and people correctly instead
+    // of guessing and needing a round trip to correct itself.
+    let liveSystem = SYSTEM_PROMPT;
+    try {
+      const snapshot = await ctx.runQuery(internal.agentTools.workspaceSnapshot, {});
+      liveSystem = `${SYSTEM_PROMPT}${LIVE_STATE_PREAMBLE}${JSON.stringify(snapshot, null, 1)}`;
+    } catch (err) {
+      console.error("Workspace snapshot unavailable:", err);
+    }
+
     const actions: AgentAction[] = [];
     const summaries: string[] = [];
 
     for (let step = 0; step < MAX_STEPS; step += 1) {
       let data: any;
       try {
-        data = await callGemini(apiKey, contents);
+        data = await callGemini(apiKey, contents, { system: liveSystem });
       } catch (err: any) {
         return {
           reply:
@@ -1772,3 +1794,110 @@ export const chat = action({
     });
   },
 });
+
+/* ── Ambient page intelligence ──────────────────────────────────── */
+
+const BRIEF_SYSTEM_PROMPT = `You are AIE Agent writing the intelligence panel that sits at the top of a page in an agile workspace.
+
+You are handed facts that were already computed from the database. Your job is the "so what".
+
+- Two to four sentences. Plain text: no markdown, no headings, no bullets, no preamble.
+- Lead with the single most important thing on this page. Name the specific project, task or person — never speak in generalities when a name is available.
+- Then say what it means and what to do about it. Do not recite the metrics; they are already displayed next to this text.
+- Every number, name and status must come from the facts you were given. Never invent or estimate one.
+- If the picture is healthy, say so plainly and still name one thing worth doing.
+- No questions. No cheerleading. No "Great question!".`;
+
+function briefUserPrompt(kind: string, brief: any, extra: unknown): string {
+  return `Page: ${kind}
+Scope: ${brief?.scope ?? "workspace"}
+
+Facts:
+${JSON.stringify(brief, null, 1)}
+${extra ? `\nAdditional analysis from the insight engine:\n${JSON.stringify(extra, null, 1)}` : ""}
+
+Write the intelligence panel for this page.`;
+}
+
+/** Facts-only read-out, used when the model is unavailable or unconfigured. */
+function fallbackNarrative(brief: any): string {
+  if (!brief) return "No data available yet.";
+  const lead = brief.headline ?? "";
+  const worst = brief.flags?.[0];
+  const action = brief.suggestions?.[0];
+  const parts = [lead];
+  if (worst) parts.push(`${worst.title}: ${worst.detail}`);
+  if (action) parts.push(action);
+  return parts.filter(Boolean).join(" ");
+}
+
+export interface BriefResult {
+  text: string;
+  generatedAt: number;
+  cached: boolean;
+}
+
+/**
+ * The AI read-out for a page. Cached for 15 minutes per (kind, project), and
+ * falls back to a deterministic summary so the panel is never blank and never
+ * blocked on the model.
+ */
+export const brief = action({
+  args: {
+    kind: v.union(
+      v.literal("dashboard"),
+      v.literal("project"),
+      v.literal("sprint"),
+      v.literal("team"),
+      v.literal("risks"),
+      v.literal("tasks")
+    ),
+    projectId: v.optional(v.id("projects")),
+  },
+  handler: async (ctx, args): Promise<BriefResult> => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
+
+    const key = briefingKey(args.kind, args.projectId);
+    const cached = (await ctx.runQuery(internal.intelligence.cachedNarrative, {
+      key,
+    })) as BriefResult | null;
+    if (cached) return cached;
+
+    const facts = (await ctx.runQuery(api.intelligence.facts, {
+      kind: args.kind,
+      projectId: args.projectId,
+    })) as any;
+
+    let text = "";
+    const apiKey = process.env.GOOGLE_AI_API_KEY;
+    if (apiKey) {
+      try {
+        // The project view also gets the app's own insight engine feeding it,
+        // so "why is this slipping" is answered with the real analysis.
+        const extra =
+          args.kind === "project" && args.projectId
+            ? await ctx.runQuery(api.insights.generate, { projectId: args.projectId })
+            : null;
+        const data = await callGemini(
+          apiKey,
+          [{ role: "user", parts: [{ text: briefUserPrompt(args.kind, facts, extra) }] }],
+          { system: BRIEF_SYSTEM_PROMPT }
+        );
+        text = extractText(data);
+      } catch (err) {
+        console.error("Briefing model error:", err);
+      }
+    }
+    if (!text) text = fallbackNarrative(facts);
+
+    await ctx.runMutation(internal.intelligence.storeNarrative, {
+      key,
+      kind: args.kind,
+      text,
+    });
+    return { text, generatedAt: Date.now(), cached: false };
+  },
+});
+
+export type { BriefKind };

@@ -2,6 +2,7 @@ import { cssVar } from "@/lib/theme-colors";
 import { useState, useMemo, useEffect } from "react";
 import { useQuery } from "convex/react";
 import { api } from "../convex/_generated/api";
+import IntelligencePanel from "@/components/IntelligencePanel";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { insightSeverityStyles } from "@/lib/badge-colors";
@@ -58,6 +59,8 @@ export default function Team() {
           <p className="text-sm text-muted-foreground">Workload visibility and capacity tracking</p>
         </div>
       </div>
+
+      <IntelligencePanel kind="team" />
 
       {projects && projects.length > 1 && (
         <div className="flex gap-2 flex-wrap">

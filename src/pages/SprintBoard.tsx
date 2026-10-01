@@ -2,6 +2,7 @@ import { cssVar } from "@/lib/theme-colors";
 import { useState, useMemo, useCallback, useEffect } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../convex/_generated/api";
+import IntelligencePanel from "@/components/IntelligencePanel";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -204,6 +205,8 @@ export default function SprintBoard() {
           </div>
         )}
       </div>
+
+      <IntelligencePanel kind="sprint" projectId={selectedProjectId ?? undefined} />
 
       {/* Project selector */}
       {projects && projects.length > 1 && (

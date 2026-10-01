@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../convex/_generated/api";
+import IntelligencePanel from "@/components/IntelligencePanel";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -218,6 +219,8 @@ export default function Risks() {
           <Plus className="w-4 h-4" /> New Risk
         </Button>
       </div>
+
+      <IntelligencePanel kind="risks" projectId={selectedProjectId ?? undefined} />
 
       {projects && projects.length > 1 && (
         <div className="flex gap-2 flex-wrap">

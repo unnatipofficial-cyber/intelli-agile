@@ -3,6 +3,7 @@ import { useAction } from "convex/react";
 import { api } from "../convex/_generated/api";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
+import { AGENT_OPEN_EVENT, type OpenAgentDetail } from "@/lib/aie-bus";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -127,6 +128,27 @@ export default function AIChat() {
     }
     setIsLoading(false);
   };
+
+  // Kept in a ref so the event listener can stay registered once while still
+  // calling the latest handler (which closes over current isLoading/input).
+  const sendRef = useRef(sendMessage);
+  useEffect(() => {
+    sendRef.current = sendMessage;
+  });
+
+  // Pages hand work to the agent through a custom event rather than shared
+  // context — e.g. clicking a recommendation in the intelligence panel.
+  useEffect(() => {
+    const handleOpen = (event: Event) => {
+      const detail = (event as CustomEvent<OpenAgentDetail>).detail;
+      setIsOpen(true);
+      if (detail?.prompt) {
+        setTimeout(() => sendRef.current(detail.prompt), 120);
+      }
+    };
+    window.addEventListener(AGENT_OPEN_EVENT, handleOpen);
+    return () => window.removeEventListener(AGENT_OPEN_EVENT, handleOpen);
+  }, []);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {

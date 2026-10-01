@@ -197,6 +197,21 @@ const schema = defineSchema(
       .index("by_project", ["projectId"]),
 
     /**
+     * Ambient intelligence for the pages: the AI-written read-out attached to
+     * a project or workspace view. Cached with a TTL so opening a page never
+     * costs an API call after the first visit.
+     */
+    aiBriefings: defineTable({
+      key: v.string(),
+      kind: v.string(),
+      text: v.string(),
+      generatedAt: v.number(),
+      expiresAt: v.number(),
+    })
+      .index("by_key", ["key"])
+      .index("by_expiry", ["expiresAt"]),
+
+    /**
      * Recurring jobs the user asked the AIE Agent to run without them being
      * present — "every weekday at 9am tell me what's at risk". `nextRunAt` is
      * what the hourly cron sweeps for, so pausing a schedule just means
