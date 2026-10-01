@@ -36,7 +36,12 @@ type DbCtx = { db: any };
  * table's document shape, which makes ordinary field reads fail to compile.
  */
 async function getDoc(ctx: any, id: any): Promise<any> {
-  return await getDoc(ctx,id);
+  if (!id) return null;
+  try {
+    return await ctx.db.get(id);
+  } catch {
+    return null;
+  }
 }
 
 interface Resolved {

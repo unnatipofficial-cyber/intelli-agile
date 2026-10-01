@@ -289,7 +289,7 @@ export default function Analytics() {
           <div className="h-[250px]">
             {workload && workload.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={workload.map((m) => ({ name: (m.user as any)?.name?.split(" ")[0] || "?", active: m.activePoints, completed: m.completedPoints }))}>
+                <BarChart data={workload.filter((m) => m.activePoints > 0 || m.completedPoints > 0).map((m) => ({ name: (m.user as any)?.name?.split(" ")[0] || "?", active: m.activePoints, completed: m.completedPoints }))}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
                   <XAxis dataKey="name" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
                   <YAxis tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
