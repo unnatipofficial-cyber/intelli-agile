@@ -25,6 +25,13 @@ interface AuthProps {
   redirectAfterAuth?: string;
 }
 
+/**
+ * Right-side photo panel of the split sign-in layout. Same workspace image the
+ * /auth/ui variant uses, so both sign-in pages read as one product.
+ */
+const AUTH_PHOTO =
+  "https://images.unsplash.com/photo-1506439773649-6e0eb8cfb237?auto=format&fit=crop&w=1200&q=80";
+
 function resolveRedirectAfterAuth(
   returnTo: string | null,
   fallback = "/dashboard",
@@ -111,12 +118,9 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
   };
 
   return (
-    <div className="min-h-screen flex flex-col">
-
-      
-      {/* Auth Content */}
-      <div className="flex-1 flex items-center justify-center">
-        <div className="flex items-center justify-center h-full flex-col">
+    <div className="w-full min-h-screen md:grid md:grid-cols-2">
+      {/* Form column — the card is unchanged, it just sits in the left half. */}
+      <div className="flex min-h-screen items-center justify-center p-6 md:p-0 md:py-12">
         <Card className="min-w-[350px] pb-0 border shadow-md">
           {step === "signIn" ? (
             <>
@@ -290,6 +294,23 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
             </a>
           </div>
         </Card>
+      </div>
+
+      {/* Photo column — restored right-side panel, hidden below md. */}
+      <div
+        className="hidden md:block relative bg-cover bg-center"
+        style={{ backgroundImage: `url(${AUTH_PHOTO})` }}
+      >
+        <div className="absolute inset-x-0 bottom-0 h-[100px] bg-gradient-to-t from-background to-transparent" />
+        <div className="relative z-10 flex h-full flex-col items-center justify-end p-2 pb-6">
+          <blockquote className="space-y-2 text-center text-foreground">
+            <p className="text-lg font-medium">
+              &ldquo;Welcome back. The journey continues.&rdquo;
+            </p>
+            <cite className="block text-sm font-light text-muted-foreground not-italic">
+              &mdash; AIE
+            </cite>
+          </blockquote>
         </div>
       </div>
     </div>
