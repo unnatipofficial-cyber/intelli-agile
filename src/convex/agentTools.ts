@@ -2287,6 +2287,334 @@ export const createTasksBulk = internalMutation({
 });
 
 /* ═══════════════════════════════════════════════════════════════
+   SCHEDULED AGENT RUNS
+   The user asks the agent to do something recurring; the hourly cron in
+   crons.ts sweeps `dueSchedules`, writes a digest, and reschedules it.
+   ═══════════════════════════════════════════════════════════════ */
+
+const WEEKDAYS = [
+  "sunday",
+  "monday",
+  "tuesday",
+  "wednesday",
+  "thursday",
+  "friday",
+  "saturday",
+];
+
+/** Next firing time for a cadence, always in the future. */
+function computeNextRun(
+  cadence: "hourly" | "daily" | "weekly",
+  timeOfDay: string | undefined,
+  weekday: string | undefined,
+  from: number = Date.now()
+): number {
+  if (cadence === "hourly") return from + 3600_000;
+
+  const [h, m] = (timeOfDay ?? "09:00").split(":");
+  const hour = Math.min(23, Math.max(0, Number(h) || 0));
+  const minute = Math.min(59, Math.max(0, Number(m) || 0));
+
+  const next = new Date(from);
+  next.setUTCHours(hour, minute, 0, 0);
+  if (next.getTime() <= from) next.setUTCDate(next.getUTCDate() + 1);
+
+  if (cadence === "weekly") {
+    const target = Math.max(0, WEEKDAYS.indexOf((weekday ?? "monday").toLowerCase()));
+    while (next.getUTCDay() !== target) next.setUTCDate(next.getUTCDate() + 1);
+  }
+  return next.getTime();
+}
+
+function describeSchedule(s: any, userName?: string) {
+  const when =
+    s.cadence === "hourly"
+      ? "every hour"
+      : s.cadence === "daily"
+        ? `every day at ${s.timeOfDay ?? "09:00"}`
+        : `every ${s.weekday ?? "monday"} at ${s.timeOfDay ?? "09:00"}`;
+  return {
+    id: s._id,
+    name: s.name,
+    prompt: s.prompt,
+    cadence: s.cadence,
+    when,
+    project: s.project ?? null,
+    enabled: s.enabled,
+    owner: userName ?? null,
+    nextRunAt: isoToday(s.nextRunAt) + " " + isoTime(s.nextRunAt),
+    lastRunAt: s.lastRunAt ? describeRelative(s.lastRunAt) : "never",
+    lastResult: s.lastResult ?? null,
+  };
+}
+
+function isoTime(timestamp: number): string {
+  return new Date(timestamp).toISOString().slice(11, 16);
+}
+
+export const listSchedules = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    const userId = await requireActor(ctx);
+    const schedules = await ctx.db
+      .query("agentSchedules")
+      .withIndex("by_user", (q: any) => q.eq("userId", userId))
+      .collect();
+    return schedules.map((s: any) => describeSchedule(s, "you"));
+  },
+});
+
+/** The hourly cron's sweep. Read-only, so it needs no auth context. */
+export const dueSchedules = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    const now = Date.now();
+    return await ctx.db
+      .query("agentSchedules")
+      .withIndex("by_due", (q: any) => q.lte("nextRunAt", now))
+      .filter((s: any) => s.enabled)
+      .take(5);
+  },
+});
+
+/** Read-only snapshot a scheduled run reasons over. */
+export const digestContext = internalQuery({
+  args: { project: v.optional(v.string()) },
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    const projects = args.project
+      ? [await resolveProject(ctx, args.project)]
+      : [{ ok: true as const, id: undefined as any, name: null as string | null }];
+
+    if (args.project && !projects[0].ok) return { error: projects[0].error };
+
+    const allProjects = await ctx.db.query("projects").collect();
+    const scoped = projects[0].id
+      ? allProjects.filter((p: any) => p._id === projects[0].id)
+      : allProjects;
+
+    const tasks = await ctx.db.query("tasks").collect();
+    const risks = await ctx.db.query("risks").collect();
+    const sprints = await ctx.db.query("sprints").collect();
+    const users = await ctx.db.query("users").collect();
+
+    const scopeIds = new Set(scoped.map((p: any) => p._id));
+    const inScope = <T extends { projectId: any }>(rows: T[]) =>
+      rows.filter((r) => scopeIds.has(r.projectId));
+
+    const scopedTasks = inScope(tasks as any[]);
+    const open = scopedTasks.filter((t: any) => t.status !== "done");
+
+    return {
+      scope: projects[0].name ?? "the whole workspace",
+      projects: scoped.map((p: any) => ({
+        name: p.name,
+        status: p.status,
+        priority: p.priority,
+        endDate: p.endDate ?? null,
+        progressPercent: (() => {
+          const t = scopedTasks.filter((x: any) => x.projectId === p._id);
+          if (!t.length) return 0;
+          return Math.round((t.filter((x: any) => x.status === "done").length / t.length) * 100);
+        })(),
+      })),
+      openTasks: open.length,
+      overdueTasks: open.filter((t: any) => t.dueDate && t.dueDate < now).map((t: any) => ({
+        title: t.title,
+        daysOverdue: Math.round((now - t.dueDate) / 86400000),
+        priority: t.priority,
+      })),
+      unassignedOpenTasks: open.filter((t: any) => !t.assigneeId).length,
+      openBugs: open.filter((t: any) => t.type === "bug").length,
+      criticalRisks: (inScope(risks as any[]) as any[])
+        .filter((r) => r.status === "open" && (r.severity === "critical" || r.severity === "high"))
+        .map((r) => ({ title: r.title, severity: r.severity, score: r.score })),
+      activeSprint: (inScope(sprints as any[]) as any[])
+        .filter((s) => s.status === "active")
+        .map((s) => {
+          const st = scopedTasks.filter((t: any) => t.sprintId === s._id);
+          const donePoints = st
+            .filter((t: any) => t.status === "done")
+            .reduce((sum: number, t: any) => sum + (t.storyPoints ?? 0), 0);
+          const totalPoints = st.reduce((sum: number, t: any) => sum + (t.storyPoints ?? 0), 0);
+          return {
+            name: s.name,
+            goal: s.goal ?? null,
+            daysRemaining: Math.round((s.endDate - now) / 86400000),
+            completedPoints: donePoints,
+            totalPoints,
+          };
+        }),
+      teamLoad: users
+        .map((u: any) => {
+          const mine = scopedTasks.filter((t: any) => t.assigneeId === u._id && t.status !== "done");
+          return {
+            name: u.name ?? u.email ?? "Unknown",
+            openTasks: mine.length,
+            openPoints: mine.reduce((sum: number, t: any) => sum + (t.storyPoints ?? 0), 0),
+          };
+        })
+        .sort((a, b) => b.openPoints - a.openPoints)
+        .slice(0, 5),
+    };
+  },
+});
+
+/**
+ * Persist a scheduled run's digest and push the schedule to its next firing.
+ * Internal only, and the userId always comes from the schedule row itself, so
+ * a digest can only ever be delivered to the person who asked for it.
+ */
+export const storeDigest = internalMutation({
+  args: {
+    scheduleId: v.id("agentSchedules"),
+    body: v.string(),
+    fellBack: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    const schedule = await ctx.db.get(args.scheduleId);
+    if (!schedule) return { stored: false };
+
+    const now = Date.now();
+    await ctx.db.insert("notifications", {
+      userId: schedule.userId,
+      title: schedule.name,
+      message: args.body.slice(0, 900),
+      type: schedule.project ? "project" : "team",
+      isRead: false,
+      createdAt: now,
+    });
+    await ctx.db.patch(args.scheduleId, {
+      lastRunAt: now,
+      lastResult: args.body.slice(0, 200),
+      nextRunAt: computeNextRun(
+        schedule.cadence as "hourly" | "daily" | "weekly",
+        schedule.timeOfDay,
+        schedule.weekday,
+        now
+      ),
+    });
+    return { stored: true, fellBack: !!args.fellBack };
+  },
+});
+
+export const createSchedule = internalMutation({
+  args: {
+    name: v.string(),
+    prompt: v.string(),
+    cadence: v.optional(v.string()),
+    timeOfDay: v.optional(v.string()),
+    weekday: v.optional(v.string()),
+    project: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const actor = await requireActor(ctx);
+    const cadence = normEnum(
+      args.cadence ?? "daily",
+      ["hourly", "daily", "weekly"] as const,
+      "daily"
+    );
+    let projectName: string | undefined;
+    if (args.project) {
+      const p = await resolveProject(ctx, args.project);
+      if (!p.ok) return { error: p.error };
+      projectName = p.name;
+    }
+    const timeOfDay = args.timeOfDay?.trim() || "09:00";
+    const weekday = cadence === "weekly" ? (args.weekday ?? "monday").toLowerCase() : undefined;
+    const nextRunAt = computeNextRun(cadence, timeOfDay, weekday);
+    const scheduleId = await ctx.db.insert("agentSchedules", {
+      userId: actor,
+      name: args.name.trim(),
+      prompt: args.prompt.trim(),
+      cadence,
+      timeOfDay,
+      weekday,
+      project: projectName,
+      nextRunAt,
+      enabled: true,
+      createdAt: Date.now(),
+    });
+    const record = await ctx.db.get(scheduleId);
+    return { ok: true, ...describeSchedule(record) };
+  },
+});
+
+export const toggleSchedule = internalMutation({
+  args: {
+    schedule: v.string(),
+    enabled: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    const actor = await requireActor(ctx);
+    const schedule = await resolveSchedule(ctx, args.schedule, actor);
+    if (!schedule.ok) return { error: schedule.error };
+    const enabled = args.enabled ?? !schedule.id.enabled;
+    await ctx.db.patch(schedule.id._id, {
+      enabled,
+      nextRunAt: enabled
+        ? computeNextRun(
+            schedule.id.cadence as "hourly" | "daily" | "weekly",
+            schedule.id.timeOfDay,
+            schedule.id.weekday
+          )
+        : Number.MAX_SAFE_INTEGER,
+    });
+    return {
+      ok: true,
+      name: schedule.id.name,
+      enabled,
+      message: enabled
+        ? `Resumed "${schedule.id.name}".`
+        : `Paused "${schedule.id.name}".`,
+    };
+  },
+});
+
+export const deleteSchedule = internalMutation({
+  args: {
+    schedule: v.string(),
+    confirmed: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    const actor = await requireActor(ctx);
+    const schedule = await resolveSchedule(ctx, args.schedule, actor);
+    if (!schedule.ok) return { error: schedule.error };
+    if (!args.confirmed) {
+      return {
+        needsConfirmation: true,
+        message: `Delete the schedule "${schedule.id.name}"? It will stop running. Ask the user to confirm, then call delete_schedule again with confirmed: true.`,
+      };
+    }
+    await ctx.db.delete(schedule.id._id);
+    return { ok: true, deleted: schedule.id.name };
+  },
+});
+
+async function resolveSchedule(ctx: DbCtx, input: string, userId: any): Promise<Resolved> {
+  const mine = await ctx.db
+    .query("agentSchedules")
+    .withIndex("by_user", (q: any) => q.eq("userId", userId))
+    .collect();
+  if (!mine.length) return { ok: false, error: "You have no scheduled agent runs yet." };
+  const match = findFuzzy(
+    input,
+    mine.map((s: any) => ({
+      value: s._id,
+      label: s.name,
+      aliases: [s.prompt].filter(Boolean) as string[],
+    }))
+  );
+  if (!match) {
+    return {
+      ok: false,
+      error: `No schedule matches "${input}". Yours: ${mine.map((s: any) => s.name).join(", ")}`,
+    };
+  }
+  return { ok: true, id: match.item.value, name: match.label, note: corrected(input, match) };
+}
+
+/* ═══════════════════════════════════════════════════════════════
    TEAM MEMBERSHIP
    In AIE the "team" is the users table: being on the team means having a user
    record, and being on a project means a projectMembers row. These tools cover

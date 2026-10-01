@@ -713,6 +713,55 @@ const TOOLS = [
           required: ["user", "title"],
         },
       },
+      /* ── Scheduled runs ── */
+      {
+        name: "list_schedules",
+        description:
+          "List the recurring checks the user has set up for you, when each next fires, and what it last reported.",
+        parameters: { type: "OBJECT", properties: {} },
+      },
+      {
+        name: "create_schedule",
+        description:
+          "Set up a recurring unattended check that delivers a short digest as a notification. cadence hourly/daily/weekly, timeOfDay as 'HH:MM' (24h), weekday for weekly. Use this when the user asks you to keep an eye on something on a schedule.",
+        parameters: {
+          type: "OBJECT",
+          properties: {
+            name: { type: "STRING" },
+            prompt: { type: "STRING" },
+            cadence: { type: "STRING" },
+            timeOfDay: { type: "STRING" },
+            weekday: { type: "STRING" },
+            project: { type: "STRING" },
+          },
+          required: ["name", "prompt"],
+        },
+      },
+      {
+        name: "toggle_schedule",
+        description: "Pause or resume a recurring check by name.",
+        parameters: {
+          type: "OBJECT",
+          properties: {
+            schedule: { type: "STRING" },
+            enabled: { type: "BOOLEAN" },
+          },
+          required: ["schedule"],
+        },
+      },
+      {
+        name: "delete_schedule",
+        description:
+          "DESTRUCTIVE. Deletes a recurring check. Requires confirmed: true after the user agrees.",
+        parameters: {
+          type: "OBJECT",
+          properties: {
+            schedule: { type: "STRING" },
+            confirmed: { type: "BOOLEAN" },
+          },
+          required: ["schedule"],
+        },
+      },
       {
         name: "create_retrospective",
         description: "File a sprint retrospective with what went well, what to improve and action items.",
@@ -752,6 +801,11 @@ PEOPLE — GET THIS RIGHT
 - To take someone off a single project use remove_project_member. To take them off the workspace entirely (all projects, tasks unassigned, profile deleted) use remove_team_member, which is gated.
 - When handing out work, check their current load first (member_report or list_team) so you do not pile onto whoever already has the most open tasks.
 
+RUNNING WITHOUT THE USER
+- You can also work on a timer. When the user asks you to keep an eye on something ("check Apollo every weekday at 9am", "ping me hourly about blockers"), call create_schedule. It delivers a short digest to their notifications each time it fires, so the prompt you write should be the question you want answered, not an instruction to do a destructive thing.
+- Schedules run unattended, so never put deletes or bulk edits in one. Confirm the schedule with the user, then confirm it does what they expect.
+- Use list_schedules to answer "what am I already checking on?", and toggle_schedule to pause or resume one.
+
 TYPO TOLERANCE — THIS IS CRITICAL
 - Users type fast and misspell constantly: "creat a projct called apolo", "asign sarah the onbaording flow", "mark teh design task don". You MUST still understand and act.
 - Every tool resolves project names, task titles and people's names with fuzzy matching, so PASS NAMES EXACTLY AS THE USER TYPED THEM. Never pre-correct a name yourself, never spell-check the user, and never reply "I could not find that, please rephrase" just because a name looks misspelled. Send it through; the database decides what was meant.
@@ -760,7 +814,7 @@ TYPO TOLERANCE — THIS IS CRITICAL
 - Only ask a clarifying question when the request is genuinely ambiguous — two different people with the same name, or no project at all. Never ask for a re-spelling.
 
 DESTRUCTIVE ACTIONS
-- delete_project, delete_task, delete_risk, delete_epic, delete_story, remove_project_member, remove_team_member and bulk_update_tasks are gated. Call them WITHOUT confirmed first; the response will contain needsConfirmation and a plain-English impact summary. Relay that summary and ask the user to confirm. Only when they clearly say yes, call the same tool again with confirmed: true.
+- delete_project, delete_task, delete_risk, delete_epic, delete_story, remove_project_member, remove_team_member, delete_schedule and bulk_update_tasks are gated. Call them WITHOUT confirmed first; the response will contain needsConfirmation and a plain-English impact summary. Relay that summary and ask the user to confirm. Only when they clearly say yes, call the same tool again with confirmed: true.
 - Never set confirmed: true on the first call. Never delete, archive, remove or bulk-edit anything on your own initiative.
 
 ANSWERING QUALITY
@@ -778,7 +832,8 @@ FACTS
 
 async function callGemini(
   apiKey: string,
-  contents: GeminiContent[]
+  contents: GeminiContent[],
+  options?: { tools?: unknown[]; system?: string }
 ): Promise<any> {
   for (const model of MODELS) {
     for (let attempt = 0; attempt < 2; attempt += 1) {
@@ -789,8 +844,10 @@ async function callGemini(
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             contents,
-            tools: TOOLS,
-            systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
+            ...(options?.tools ? { tools: options.tools } : {}),
+            systemInstruction: {
+              parts: [{ text: options?.system ?? SYSTEM_PROMPT }],
+            },
             generationConfig: { maxOutputTokens: 4096, temperature: 0.3 },
           }),
         });
@@ -943,6 +1000,117 @@ export const agentLoop = internalAction({
   },
 });
 
+/* ── Scheduled runs (driven by the hourly cron in crons.ts) ────── */
+
+/**
+ * Digest voice: short, concrete, no formatting — this is read on a phone
+ * notification, not in the chat panel.
+ */
+const DIGEST_SYSTEM_PROMPT = `You are AIE Agent sending an unattended check-in to a project manager.
+
+You get one instruction and a snapshot of the workspace. Write the digest they will read on their phone.
+
+Format:
+- Two to four short lines of plain text. No markdown, no headings, no bullet characters, no preamble.
+- Lead with what needs attention, naming the specific project, task or person.
+- End with the single most useful next action.
+- If everything is genuinely fine, say so in one line instead of inventing drama.
+
+Rules:
+- Every number, name and status must come from the data you were given. Never invent or extrapolate.
+- If the data is empty, say there is nothing to report yet.
+- No questions. The user is not there to answer them.`;
+
+function extractText(data: any): string {
+  return ((data?.candidates?.[0]?.content?.parts ?? []) as any[])
+    .map((part) => (typeof part.text === "string" ? part.text : ""))
+    .join("")
+    .trim();
+}
+
+function digestUserPrompt(schedule: any, snapshot: any): string {
+  return `${schedule.prompt}
+
+Workspace snapshot as of ${new Date().toISOString().slice(0, 16).replace("T", " ")} UTC:
+${JSON.stringify(snapshot, null, 1)}`;
+}
+
+/**
+ * Facts-only fallback for when the model is unreachable or unconfigured, so a
+ * scheduled run still delivers something true rather than nothing.
+ */
+function fallbackDigest(schedule: any, snapshot: any): string {
+  if (snapshot?.error) return `Could not check ${schedule.name}: ${snapshot.error}`;
+  const overdue = snapshot?.overdueTasks?.length ?? 0;
+  const risks = snapshot?.criticalRisks?.length ?? 0;
+  const sprint = snapshot?.activeSprint?.[0];
+  const parts = [
+    `${snapshot?.openTasks ?? 0} open tasks across ${snapshot?.scope ?? "the workspace"}`,
+  ];
+  if (overdue > 0) parts.push(`${overdue} overdue`);
+  if (risks > 0) parts.push(`${risks} high or critical risk(s)`);
+  if (sprint) {
+    parts.push(
+      `${sprint.name} has ${sprint.daysRemaining} day(s) left at ${sprint.completedPoints}/${sprint.totalPoints} story points`
+    );
+  }
+  const tail =
+    overdue > 0 || risks > 0
+      ? " Review the overdue items and open risks first."
+      : " Nothing needs urgent attention.";
+  return `${schedule.name}: ${parts.join(", ")}.${tail}`;
+}
+
+/**
+ * The cron entry point. There is no signed-in user here, so this only ever
+ * reads and writes schedules the user themselves created — every digest goes
+ * back to the owner of the schedule, and the agent is given no write tools.
+ */
+export const runScheduledDigests = internalAction({
+  args: {},
+  handler: async (ctx): Promise<{ ran: number; stored: number }> => {
+    const due = (await ctx.runQuery(internal.agentTools.dueSchedules, {})) as any[];
+    if (!due.length) return { ran: 0, stored: 0 };
+
+    const apiKey = process.env.GOOGLE_AI_API_KEY;
+    let stored = 0;
+
+    for (const schedule of due) {
+      const snapshot = await ctx.runQuery(internal.agentTools.digestContext, {
+        project: schedule.project ?? undefined,
+      });
+
+      let body = "";
+      let fellBack = false;
+      if (apiKey && !snapshot.error) {
+        try {
+          const data = await callGemini(
+            apiKey,
+            [{ role: "user", parts: [{ text: digestUserPrompt(schedule, snapshot) }] }],
+            { system: DIGEST_SYSTEM_PROMPT }
+          );
+          body = extractText(data);
+        } catch (err) {
+          console.error("Scheduled digest model error:", err);
+        }
+      }
+      if (!body) {
+        fellBack = true;
+        body = fallbackDigest(schedule, snapshot);
+      }
+
+      await ctx.runMutation(internal.agentTools.storeDigest, {
+        scheduleId: schedule._id,
+        body,
+        fellBack,
+      });
+      stored += 1;
+    }
+
+    return { ran: due.length, stored };
+  },
+});
+
 /* ── Tool execution: model names → internal functions ──────────── */
 
 /**
@@ -1022,6 +1190,10 @@ async function runTool(
     setSprint: str(rawArgs.setSprint),
     jobTitle: str(rawArgs.jobTitle),
     department: str(rawArgs.department),
+    cadence: str(rawArgs.cadence),
+    timeOfDay: str(rawArgs.timeOfDay ?? rawArgs.time),
+    weekday: str(rawArgs.weekday ?? rawArgs.day),
+    schedule: str(rawArgs.schedule ?? rawArgs.name),
     labels: Array.isArray(rawArgs.labels) ? rawArgs.labels.map(String) : undefined,
     wentWell: Array.isArray(rawArgs.wentWell) ? rawArgs.wentWell.map(String) : undefined,
     toImprove: Array.isArray(rawArgs.toImprove) ? rawArgs.toImprove.map(String) : undefined,
@@ -1347,6 +1519,31 @@ async function runTool(
         confirmed: args.confirmed,
       });
 
+    /* Scheduled runs */
+    case "list_schedules":
+      return {
+        schedules: await ctx.runQuery(internal.agentTools.listSchedules, {}),
+      };
+    case "create_schedule":
+      return await ctx.runMutation(internal.agentTools.createSchedule, {
+        name: String(args.name ?? args.title ?? "Scheduled check"),
+        prompt: String(args.content ?? args.description ?? args.message ?? ""),
+        cadence: args.cadence,
+        timeOfDay: args.timeOfDay,
+        weekday: args.weekday,
+        project: args.project,
+      });
+    case "toggle_schedule":
+      return await ctx.runMutation(internal.agentTools.toggleSchedule, {
+        schedule: String(args.schedule ?? args.name),
+        enabled: rawArgs.enabled === true ? true : undefined,
+      });
+    case "delete_schedule":
+      return await ctx.runMutation(internal.agentTools.deleteSchedule, {
+        schedule: String(args.schedule ?? args.name),
+        confirmed: args.confirmed,
+      });
+
     /* Collaboration */
     case "add_comment":
       return await ctx.runMutation(internal.agentTools.addComment, {
@@ -1454,6 +1651,19 @@ function describeAction(
       ok: true,
       label: `Updated ${response.updatedCount} task(s) (${response.changes}).`,
     };
+  }
+  if (name === "create_schedule") {
+    return {
+      tool: name,
+      ok: true,
+      label: `Scheduled "${response.name}" ${response.when}; first run ${response.nextRunAt}.`,
+    };
+  }
+  if (name === "toggle_schedule") {
+    return { tool: name, ok: true, label: String(response.message) };
+  }
+  if (name === "delete_schedule") {
+    return { tool: name, ok: true, label: `Deleted schedule "${response.deleted}".` };
   }
   if (name === "add_project_member") {
     return {

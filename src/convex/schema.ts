@@ -195,6 +195,36 @@ const schema = defineSchema(
       createdAt: v.number(),
     }).index("by_sprint", ["sprintId"])
       .index("by_project", ["projectId"]),
+
+    /**
+     * Recurring jobs the user asked the AIE Agent to run without them being
+     * present — "every weekday at 9am tell me what's at risk". `nextRunAt` is
+     * what the hourly cron sweeps for, so pausing a schedule just means
+     * pushing it far into the future.
+     */
+    agentSchedules: defineTable({
+      userId: v.id("users"),
+      name: v.string(),
+      /** What the agent should look at and report on. */
+      prompt: v.string(),
+      cadence: v.union(
+        v.literal("hourly"),
+        v.literal("daily"),
+        v.literal("weekly")
+      ),
+      /** "09:00" for daily/weekly schedules. */
+      timeOfDay: v.optional(v.string()),
+      weekday: v.optional(v.string()),
+      /** Optional project scope, stored as a name for display. */
+      project: v.optional(v.string()),
+      nextRunAt: v.number(),
+      lastRunAt: v.optional(v.number()),
+      lastResult: v.optional(v.string()),
+      enabled: v.boolean(),
+      createdAt: v.number(),
+    })
+      .index("by_user", ["userId"])
+      .index("by_due", ["nextRunAt"]),
   },
   {
     schemaValidation: false,
