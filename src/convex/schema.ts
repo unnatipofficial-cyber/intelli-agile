@@ -28,7 +28,23 @@ const schema = defineSchema(
       role: v.optional(roleValidator),
       jobTitle: v.optional(v.string()),
       department: v.optional(v.string()),
-    }).index("email", ["email"]),
+      createdAt: v.number(),
+      updatedAt: v.number(),
+    })
+      .index("email", ["email"])
+      .index("by_role", ["role"]),
+
+    /** Invitations let someone join the workspace without an account of their own. */
+    invitations: defineTable({
+      email: v.string(),
+      token: v.string(),
+      role: v.optional(roleValidator),
+      projectRole: v.optional(v.string()),
+      usedBy: v.optional(v.id("users")),
+      usedAt: v.optional(v.number()),
+      expiresAt: v.number(),
+      createdAt: v.number(),
+    }).index("by_token", ["token"]).index("by_email", ["email"]).index("by_expires", ["expiresAt"]),
 
     projects: defineTable({
       name: v.string(),
@@ -159,9 +175,13 @@ const schema = defineSchema(
       entityName: v.optional(v.string()),
       details: v.optional(v.string()),
       createdAt: v.number(),
-    }).index("by_project", ["projectId"])
+      undoKey: v.optional(v.string()),
+      before: v.optional(v.string()),
+    })
+      .index("by_project", ["projectId"])
       .index("by_user", ["userId"])
-      .index("by_project_time", ["projectId", "createdAt"]),
+      .index("by_project_time", ["projectId", "createdAt"])
+      .index("by_undo", ["undoKey"]),
 
     comments: defineTable({
       taskId: v.id("tasks"),
