@@ -137,8 +137,9 @@ export function useGraphiteSurface() {
     // landing page instead of being flattened to graphite for good.
     const restoreTo = appTheme;
     setDarkOnly(true);
-    // Always graphite for the duration of this page (origin === "/" guard is
-    // belt-and-suspenders; the hook is only ever called from the landing page).
+    // Always graphite for the duration of this page. The hook is only ever
+    // called from the public marketing pages (landing and the product guide),
+    // which share the graphite starfield chrome.
     setAppTheme("graphite");
     return () => {
       setDarkOnly(false);

@@ -309,6 +309,15 @@ export default function Landing() {
           </div>
 
           <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => navigate("/guide")}
+              data-cursor="hover"
+              className="hidden gap-1 sm:inline-flex"
+            >
+              Guide <ArrowUpRight className="h-3.5 w-3.5" />
+            </Button>
             <Button variant="ghost" size="sm" onClick={goToAuth} data-cursor="hover">
               Sign In
             </Button>
@@ -601,6 +610,15 @@ export default function Landing() {
               The line on the left fills as you scroll — the same way AIE fills in the picture of your project as the
               team works.
             </p>
+            <button
+              type="button"
+              onClick={() => navigate("/guide")}
+              data-cursor="hover"
+              className="mt-4 inline-flex items-center gap-1.5 text-xs font-semibold text-primary transition-colors hover:text-primary/80"
+            >
+              Or take the full guided tour of every section
+              <ArrowRight className="h-3.5 w-3.5" />
+            </button>
           </ScrollReveal>
 
           <div ref={spine.host} className="grid grid-cols-[2px_1fr] gap-6 sm:gap-10">
@@ -814,6 +832,16 @@ export default function Landing() {
               <div>
                 <p className="text-[10px] font-semibold tracking-[0.16em] text-muted-foreground uppercase">Product</p>
                 <ul className="mt-3 space-y-2">
+                  <li>
+                    <button
+                      type="button"
+                      onClick={() => navigate("/guide")}
+                      data-cursor="hover"
+                      className="text-xs text-muted-foreground transition-colors hover:text-foreground"
+                    >
+                      Product guide
+                    </button>
+                  </li>
                   {navLinks.map((link) => (
                     <li key={link.id}>
                       <button
