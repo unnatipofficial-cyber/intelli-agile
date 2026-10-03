@@ -18,6 +18,7 @@ import { v } from "convex/values";
 import { internalQuery, internalMutation } from "./_generated/server";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { api } from "./_generated/api";
+import { requireRole, ROLES } from "./rbac";
 import {
   findFuzzy,
   findAllFuzzy,
