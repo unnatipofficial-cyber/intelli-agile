@@ -10,18 +10,13 @@ export const getOrCreateSampleData = mutation({
 
     const now = Date.now();
 
-    // Ensure a user record exists for the current user (anonymous guests may not have one),
-    // and make whoever seeds the workspace its owner.
+    // Whoever seeds the workspace owns it. Note we deliberately do NOT invent a
+    // name for a Guest session: Convex Auth already stores the anonymous user
+    // row, and persisting a "Guest User" profile on top of it is exactly the
+    // throwaway data we do not want to keep. Guests stay nameless and are
+    // filtered out of the roster by `isEphemeralGuest`.
     const existingUser = await ctx.db.get(userId);
-    if (!existingUser) {
-      await ctx.db.insert("users", {
-        name: "Guest User",
-        isAnonymous: true,
-        role: ROLES.ADMIN,
-        createdAt: now,
-        updatedAt: now,
-      });
-    } else if (existingUser.role !== ROLES.ADMIN) {
+    if (existingUser && existingUser.role !== ROLES.ADMIN) {
       await ctx.db.patch(userId, { role: ROLES.ADMIN, updatedAt: now });
     }
 

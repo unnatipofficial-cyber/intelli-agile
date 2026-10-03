@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { requireRole, ROLES } from "./rbac";
+import { isEphemeralGuest } from "./helpers";
 
 export const listMembers = query({
   args: {},
@@ -9,7 +10,10 @@ export const listMembers = query({
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) return [];
     const users = await ctx.db.query("users").collect();
-    return users;
+    // Guest sessions are temporary try-outs, not teammates. Convex Auth leaves
+    // their nameless `users` row behind, so drop it here rather than showing
+    // an "Unknown" seat on the roster.
+    return users.filter((user) => !isEphemeralGuest(user));
   },
 });
 
@@ -52,7 +56,7 @@ export const getWorkload = query({
       (memberships as any[]).map((m) => [m.userId as string, m])
     );
 
-    return users.map((user) => {
+    return users.filter((user) => !isEphemeralGuest(user)).map((user) => {
       const seat = seatByUser.get(user._id as string) ?? null;
       const assignedTasks = (projectTasks as any[]).filter(
         (t) => t.assigneeId === user._id
