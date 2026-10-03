@@ -14,11 +14,22 @@ import type { DataModel } from "./_generated/dataModel";
  * carries no name and no email, so if it is treated as a real teammate it
  * surfaces on the Team roster as a nameless "Unknown" seat. Guests are
  * temporary by definition, so they are excluded from every roster.
+ *
+ * The `!email` clause is load-bearing, not decoration. Convex Auth reuses the
+ * anonymous row when the same browser then completes an email sign-in: it
+ * patches `email` onto that row but leaves `isAnonymous: true` on it. Purging
+ * on `isAnonymous` alone deleted real, email-backed accounts on sign-out and
+ * left their `authAccounts` rows pointing at nothing — which makes every later
+ * sign-in with that address fail with "Could not update user document with ID
+ * ...". Once a guest has an email it is a real account and must be kept.
  */
 export function isEphemeralGuest(
-  user: { isAnonymous?: unknown } | null | undefined,
+  user: { isAnonymous?: unknown; email?: unknown } | null | undefined,
 ): boolean {
-  return user?.isAnonymous === true;
+  if (!user) return false;
+  if (user.isAnonymous !== true) return false;
+  const email = user.email;
+  return typeof email !== "string" || email.trim() === "";
 }
 
 /**

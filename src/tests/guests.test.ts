@@ -11,6 +11,24 @@ describe("isEphemeralGuest", () => {
     expect(isEphemeralGuest({ isAnonymous: true })).toBe(true);
   });
 
+  test("does NOT flag an anonymous row that has since gained an email", () => {
+    // This is the regression that broke sign-in. Convex Auth patches `email`
+    // onto the anonymous row when the same browser completes an OTP sign-in
+    // but leaves `isAnonymous: true`. Purging such a row deleted a real,
+    // email-backed account and orphaned its authAccounts row, so every later
+    // sign-in with that address threw "Could not update user document".
+    expect(isEphemeralGuest({ isAnonymous: true, email: "a@b.com" })).toBe(false);
+  });
+
+  test("treats a blank email as still-a-guest", () => {
+    expect(isEphemeralGuest({ isAnonymous: true, email: "" })).toBe(true);
+    expect(isEphemeralGuest({ isAnonymous: true, email: "   " })).toBe(true);
+  });
+
+  test("does not treat a non-string email as a real account", () => {
+    expect(isEphemeralGuest({ isAnonymous: true, email: null })).toBe(true);
+  });
+
   test("does not flag a real teammate", () => {
     expect(isEphemeralGuest({ isAnonymous: false })).toBe(false);
     expect(isEphemeralGuest({ name: "Alex Chen" })).toBe(false);

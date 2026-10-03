@@ -1,5 +1,5 @@
 import { cronJobs } from "convex/server";
-import { internal } from "./_generated/api";
+import { internal, api } from "./_generated/api";
 
 /**
  * The AIE Agent's heartbeat.
@@ -15,5 +15,17 @@ import { internal } from "./_generated/api";
 const crons = cronJobs();
 
 crons.cron("AIE agent scheduled runs", "0 * * * *", internal.agent.runScheduledDigests);
+
+/**
+ * Housekeeping for auth rows left behind by deleted users.
+ *
+ * An `authAccounts` row whose user document is gone makes every later sign-in
+ * with that address fail, so sweep them daily. See `repair.removeOrphanedAccounts`.
+ */
+crons.cron(
+  "Prune orphaned auth accounts",
+  "30 4 * * *",
+  api.repair.removeOrphanedAccounts,
+);
 
 export default crons;
