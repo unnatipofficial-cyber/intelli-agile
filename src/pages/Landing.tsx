@@ -24,6 +24,7 @@ import type { ReactNode } from "react";
 import { useNavigate } from "react-router";
 import { AIELogo } from "@/components/AIELogo";
 import { ThemeSwitcher } from "@/components/ThemeSwitcher";
+import { PUBLIC_PAGES } from "@/lib/public-pages";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AnimatedCounter } from "@/components/landing/AnimatedCounter";
 import { CustomCursor } from "@/components/landing/CustomCursor";
@@ -313,15 +314,18 @@ export default function Landing() {
 
           <div className="flex items-center gap-2">
             <ThemeSwitcher className="mr-1" />
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => navigate("/guide")}
-              data-cursor="hover"
-              className="hidden gap-1 sm:inline-flex"
-            >
-              Guide <ArrowUpRight className="h-3.5 w-3.5" />
-            </Button>
+            {PUBLIC_PAGES.map((page) => (
+              <Button
+                key={page.path}
+                variant="outline"
+                size="sm"
+                onClick={() => navigate(page.path)}
+                data-cursor="hover"
+                className="hidden gap-1 sm:inline-flex"
+              >
+                {page.label} <ArrowUpRight className="h-3.5 w-3.5" />
+              </Button>
+            ))}
             <Button variant="ghost" size="sm" onClick={goToAuth} data-cursor="hover">
               Sign In
             </Button>
