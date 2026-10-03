@@ -929,7 +929,7 @@ function toFunctionCallParts(calls: ToolCall[]): GeminiPart[] {
   }));
 }
 
-export { toFunctionCallParts };
+export { toFunctionCallParts, requestParts, streamGemini };
 
 async function callGemini(
   apiKey: string,
@@ -1326,6 +1326,20 @@ export const agentLoop = internalAction({
       };
 
       let { calls, text } = parse(parts);
+
+      // A functionCall without a signature cannot be echoed back: the next
+      // turn will be rejected with `Function call is missing a
+      // thought_signature`. The model owns this field, so there is nothing to
+      // fabricate — surface it here so a recurrence is diagnosable from the
+      // logs instead of surfacing later as an opaque 400.
+      for (const part of parts) {
+        if (part.functionCall && !part.functionCall.thought_signature) {
+          console.warn(
+            `[agent] model returned functionCall "${part.functionCall.name}" without a thought_signature; ` +
+              `the follow-up request may be rejected.`
+          );
+        }
+      }
 
       // The model sometimes narrates an action ("Done.", "Added her.") instead
       // of taking it. On the opening turn that is never legitimate, so retry
