@@ -7,7 +7,11 @@ function Card({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="card"
       className={cn(
+        // Shadow and border ease over the longer `reveal` duration while
+        // colour uses the quick one, so a hover reads as a lighting change
+        // rather than a lag on the text colour.
         "bg-card text-card-foreground flex flex-col gap-6 rounded-xl border py-6 shadow-sm",
+        "transition-[box-shadow,border-color,background-color] duration-[var(--aie-dur-enter)] ease-[var(--aie-ease-standard)]",
         className
       )}
       {...props}

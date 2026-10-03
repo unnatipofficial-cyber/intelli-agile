@@ -1,4 +1,5 @@
 import { motion } from "framer-motion";
+import { staggeredEnter } from "@/lib/motion";
 import {
   Brain,
   RefreshCw,
@@ -154,7 +155,7 @@ export default function IntelligencePanel({
                   key={`${flag.title}-${i}`}
                   initial={{ opacity: 0, x: -6 }}
                   animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: i * 0.04 }}
+                  transition={staggeredEnter(i)}
                   className="rounded-lg border p-3"
                   style={{ backgroundColor: sev.bg, borderColor: sev.border }}
                 >

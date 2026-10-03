@@ -249,7 +249,7 @@ export default function SettingsPage() {
   const readNotifications = notifications?.filter((n) => n.isRead) || [];
 
   return (
-    <div className="space-y-6 animate-fade-in-up max-w-4xl">
+    <div className="space-y-6 max-w-4xl">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Settings</h1>
         <p className="text-sm text-muted-foreground">Manage notifications, appearance, and account settings</p>

@@ -5,6 +5,7 @@ import { api } from "../convex/_generated/api";
 import { useAuth } from "@/hooks/use-auth";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
+import { staggeredEnter } from "@/lib/motion";
 import { insightSeverityStyles } from "@/lib/badge-colors";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -326,7 +327,7 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="space-y-6 animate-fade-in-up">
+    <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
@@ -344,7 +345,7 @@ export default function Dashboard() {
                 key={project._id}
                 onClick={() => setSelectedProjectId(project._id)}
                 className={cn(
-                  "px-3 py-1.5 rounded-xl text-xs font-medium transition-all",
+                  "px-3 py-1.5 rounded-xl text-xs font-medium aie-interactive",
                   selectedProjectId === project._id
                     ? "bg-primary text-primary-foreground shadow-sm"
                     : "glass-card hover:bg-accent/50"
@@ -431,7 +432,7 @@ export default function Dashboard() {
           <motion.div
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 }}
+            transition={staggeredEnter(0)}
           >
             <div className="glass-card p-5">
               <div className="flex items-center justify-between mb-4">
@@ -486,7 +487,7 @@ export default function Dashboard() {
             <motion.div
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.3 }}
+              transition={staggeredEnter(1)}
             >
               <div className="glass-card p-5">
                 <div className="mb-4">
@@ -523,7 +524,7 @@ export default function Dashboard() {
             <motion.div
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.35 }}
+              transition={staggeredEnter(2)}
             >
               <SprintForecast sprints={sprints || []} tasks={allTasks || []} />
             </motion.div>
@@ -531,7 +532,7 @@ export default function Dashboard() {
             <motion.div
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.4 }}
+              transition={staggeredEnter(3)}
             >
               <div className="glass-card p-5">
                 <div className="mb-4">
@@ -593,7 +594,7 @@ export default function Dashboard() {
             <motion.div
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.4 }}
+              transition={staggeredEnter(4)}
             >
               <div className="glass-card p-5">
                 <div className="mb-4">
@@ -628,7 +629,7 @@ export default function Dashboard() {
           <motion.div
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.25 }}
+            transition={staggeredEnter(5)}
           >
             <AieInsights projectId={selectedProjectId} allTasks={allTasks || []} sprints={sprints || []} risks={risks || []} workload={workloadData || []} />
           </motion.div>
@@ -639,7 +640,7 @@ export default function Dashboard() {
       <motion.div
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.3 }}
+        transition={staggeredEnter(6)}
         className="mt-6"
       >
         <Card className="border-border/50">

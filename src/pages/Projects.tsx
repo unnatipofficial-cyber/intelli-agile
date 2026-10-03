@@ -4,6 +4,7 @@ import { api } from "../convex/_generated/api";
 import IntelligencePanel from "@/components/IntelligencePanel";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
+import { staggeredEnter } from "@/lib/motion";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -177,7 +178,7 @@ export default function Projects() {
   };
 
   return (
-    <div className="space-y-6 animate-fade-in-up">
+    <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Projects</h1>
@@ -210,7 +211,7 @@ export default function Projects() {
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -12 }}
-              transition={{ delay: i * 0.05 }}
+              transition={staggeredEnter(i)}
             >
               <div className="glass-card p-5 h-full flex flex-col">
                 <div className="flex items-start justify-between mb-3">

@@ -1,4 +1,5 @@
 import { motion, useScroll, useSpring } from "framer-motion";
+import { SPRING } from "@/lib/motion";
 
 /**
  * ScrollProgressBar — a thin gradient bar pinned to the top of the page that
@@ -6,7 +7,12 @@ import { motion, useScroll, useSpring } from "framer-motion";
  */
 export function ScrollProgressBar() {
   const { scrollYProgress } = useScroll();
-  const scaleX = useSpring(scrollYProgress, { stiffness: 140, damping: 24, mass: 0.24 });
+  // `SPRING.gentle` rather than a local spring. A progress bar is driven
+  // continuously by scroll position, so it needs the settled preset to stay
+  // glued to the reading position instead of trailing and catching up — the
+  // old local values were very over-damped (ratio ~2.07), which made it feel
+  // like it was lagging rather than smoothing.
+  const scaleX = useSpring(scrollYProgress, SPRING.gentle);
 
   return (
     <motion.div

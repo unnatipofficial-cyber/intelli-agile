@@ -4,6 +4,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useTheme } from "@/hooks/use-theme";
 import { cn } from "@/lib/utils";
 import { FloatingDock, dockNavItems } from "@/components/FloatingDock";
+import { PageTransition } from "@/components/PageTransition";
 import { AIELogo } from "@/components/AIELogo";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import AIChat from "@/components/AIChat";
@@ -126,7 +127,10 @@ export default function AppLayout({ children }: { children: ReactNode }) {
       {/* pb-28 clears the fixed dock (64px tall + 24px offset) on every
           breakpoint — the old `md:pb-8` let the last row sit under it. */}
       <main className="p-4 lg:p-6 pb-28">
-        {children}
+        {/* Navigation between these views is the most frequent motion in the
+            app, so it gets the seam treatment rather than each page animating
+            itself on mount. */}
+        <PageTransition>{children}</PageTransition>
       </main>
 
       {/* Command Palette (Ctrl+K) */}

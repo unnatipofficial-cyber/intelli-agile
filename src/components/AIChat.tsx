@@ -4,6 +4,7 @@ import { useNavigate } from "react-router";
 import { api } from "../convex/_generated/api";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
+import { SPRING } from "@/lib/motion";
 import { AGENT_OPEN_EVENT, type OpenAgentDetail } from "@/lib/aie-bus";
 import { useTheme, type AppTheme, type ThemeMode } from "@/hooks/use-theme";
 import { Button } from "@/components/ui/button";
@@ -233,7 +234,7 @@ export default function AIChat() {
             initial={{ opacity: 0, y: 20, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 20, scale: 0.95 }}
-            transition={{ type: "spring", damping: 25, stiffness: 300 }}
+            transition={{ type: "spring", ...SPRING.snappy }}
             className="fixed bottom-28 right-4 md:bottom-8 md:right-6 z-40 w-[calc(100vw-2rem)] max-w-[400px] h-[560px] max-h-[75vh] rounded-2xl shadow-2xl border border-border/50 bg-background flex flex-col overflow-hidden"
           >
             {/* Header */}

@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { motion } from "framer-motion";
+import { staggeredEnter } from "@/lib/motion";
 
 interface GanttItem {
   id: string;
@@ -115,7 +116,7 @@ export default function GanttChart({ items, startDate, endDate }: GanttChartProp
               key={item.id}
               initial={{ opacity: 0, x: -10 }}
               animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: i * 0.03 }}
+              transition={staggeredEnter(i)}
               className={`flex border-b border-border/30 ${colors.bg}`}
             >
               <div className="w-48 shrink-0 px-3 py-2.5 flex items-center gap-2">

@@ -4,6 +4,7 @@ import { api } from "../convex/_generated/api";
 import IntelligencePanel from "@/components/IntelligencePanel";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
+import { staggeredEnter } from "@/lib/motion";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -209,7 +210,7 @@ export default function Risks() {
   };
 
   return (
-    <div className="space-y-6 animate-fade-in-up">
+    <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Risk Management</h1>
@@ -308,7 +309,7 @@ export default function Risks() {
                   initial={{ opacity: 0, x: 12 }}
                   animate={{ opacity: 1, x: 0 }}
                   exit={{ opacity: 0, x: -12 }}
-                  transition={{ delay: i * 0.03 }}
+                  transition={staggeredEnter(i)}
                   className="glass-card p-4 border-l-[3px]"
                   style={{ borderLeftColor: sev.text }}
                 >

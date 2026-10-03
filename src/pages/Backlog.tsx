@@ -3,6 +3,7 @@ import { useQuery, useMutation } from "convex/react";
 import { api } from "../convex/_generated/api";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
+import { staggeredEnter } from "@/lib/motion";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -232,7 +233,7 @@ export default function Backlog() {
   };
 
   return (
-    <div className="space-y-6 animate-fade-in-up">
+    <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Backlog</h1>
@@ -317,7 +318,7 @@ export default function Backlog() {
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, x: -20 }}
-                transition={{ delay: i * 0.02 }}
+                transition={staggeredEnter(i)}
                 className="glass-card p-4 flex items-center gap-3 group"
               >
                 <GripVertical className="w-4 h-4 text-muted-foreground/30 shrink-0 cursor-grab" />

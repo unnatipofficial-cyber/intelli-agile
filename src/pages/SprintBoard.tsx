@@ -5,6 +5,7 @@ import { api } from "../convex/_generated/api";
 import IntelligencePanel from "@/components/IntelligencePanel";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
+import { staggeredEnter } from "@/lib/motion";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import BurndownChart from "@/components/BurndownChart";
@@ -181,7 +182,7 @@ export default function SprintBoard() {
   );
 
   return (
-    <div className="space-y-6 animate-fade-in-up">
+    <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Sprint Board</h1>
@@ -233,7 +234,7 @@ export default function SprintBoard() {
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
+          transition={staggeredEnter(0)}
           className="p-4 rounded-xl border border-border/50 bg-card/50"
         >
           <h3 className="text-sm font-semibold mb-3">Sprint Burndown</h3>

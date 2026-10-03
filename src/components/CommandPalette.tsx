@@ -3,6 +3,7 @@ import { useQuery } from "convex/react";
 import { api } from "../convex/_generated/api";
 import { motion, AnimatePresence } from "framer-motion";
 import { useNavigate } from "react-router";
+import { SPRING } from "@/lib/motion";
 import {
   Search,
   LayoutDashboard,
@@ -176,7 +177,7 @@ export default function CommandPalette() {
             initial={{ opacity: 0, scale: 0.95, y: -10 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: -10 }}
-            transition={{ type: "spring", damping: 25, stiffness: 400 }}
+            transition={{ type: "spring", ...SPRING.snappy }}
             className="fixed top-[15%] left-1/2 -translate-x-1/2 z-50 w-full max-w-lg rounded-xl border border-border/50 bg-background shadow-2xl overflow-hidden"
           >
             {/* Search input */}

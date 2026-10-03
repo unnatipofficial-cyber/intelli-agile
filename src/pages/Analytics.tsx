@@ -4,6 +4,7 @@ import { useQuery } from "convex/react";
 import { api } from "../convex/_generated/api";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
+import { staggeredEnter } from "@/lib/motion";
 import { Badge } from "@/components/ui/badge";
 import {
   BarChart3,
@@ -115,7 +116,7 @@ export default function Analytics() {
   const cardClass = "glass-card p-5";
 
   return (
-    <div className="space-y-6 animate-fade-in-up">
+    <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Analytics</h1>
@@ -170,7 +171,7 @@ export default function Analytics() {
         </motion.div>
 
         {/* Task Completion */}
-        <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className={cardClass}>
+        <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={staggeredEnter(0)} className={cardClass}>
           <div className="flex items-center gap-2 mb-4">
             <Target className="w-4 h-4 text-primary" />
             <div>
@@ -216,7 +217,7 @@ export default function Analytics() {
         </motion.div>
 
         {/* Sprint Progress */}
-        <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className={cardClass}>
+        <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={staggeredEnter(1)} className={cardClass}>
           <div className="flex items-center gap-2 mb-4">
             <Activity className="w-4 h-4 text-primary" />
             <div>
@@ -244,7 +245,7 @@ export default function Analytics() {
         </motion.div>
 
         {/* Priority Distribution */}
-        <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className={cardClass}>
+        <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={staggeredEnter(2)} className={cardClass}>
           <div className="mb-4">
             <h3 className="text-sm font-bold">Priority Distribution</h3>
             <p className="text-xs text-muted-foreground">Tasks by priority level</p>
@@ -281,7 +282,7 @@ export default function Analytics() {
         </motion.div>
 
         {/* Team Workload */}
-        <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }} className={cardClass}>
+        <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={staggeredEnter(3)} className={cardClass}>
           <div className="mb-4">
             <h3 className="text-sm font-bold">Team Workload</h3>
             <p className="text-xs text-muted-foreground">Active story points per team member</p>
@@ -306,7 +307,7 @@ export default function Analytics() {
         </motion.div>
 
         {/* Risk Status */}
-        <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }} className={cardClass}>
+        <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={staggeredEnter(4)} className={cardClass}>
           <div className="mb-4">
             <h3 className="text-sm font-bold">Risk Status</h3>
             <p className="text-xs text-muted-foreground">Open, mitigated, and closed risks</p>

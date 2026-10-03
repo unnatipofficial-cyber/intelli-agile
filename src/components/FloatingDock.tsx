@@ -22,6 +22,7 @@ import {
   MotionValue,
 } from "framer-motion";
 import { cn } from "@/lib/utils";
+import { DURATION, SPRING } from "@/lib/motion";
 
 export const dockNavItems = [
   { title: "Dashboard", path: "/dashboard", icon: "dashboard" },
@@ -94,8 +95,12 @@ const IDLE_DISTANCE = 9999;
  * damping 12) give a damping ratio of ~0.42, so every cell visibly overshot and
  * wobbled as the pointer swept past — the main thing that read as "janky".
  * These land just above 1, so the cells glide and settle without bouncing.
+ *
+ * Only the mass is overridden: the dock's magnification is heavier than a
+ * press, so it wants a little more inertia, but the stiffness/damping still
+ * come from the shared preset so the dock cannot drift out of the system.
  */
-const CELL_SPRING = { mass: 0.4, stiffness: 250, damping: 26 } as const;
+const CELL_SPRING = { ...SPRING.snappy, mass: 0.4 } as const;
 
 /* ── Mobile dock ──────────────────────────────────────────────── */
 const FloatingDockMobile = ({
@@ -224,9 +229,13 @@ const itemVariants = {
     opacity: 1,
     y: 0,
     scale: 1,
-    transition: { type: "spring" as const, stiffness: 420, damping: 32 },
+    // `SPRING.snappy` rather than a local spring: the old `damping: 32` at this
+    // stiffness gave a damping ratio of ~0.78, which visibly overshoots and
+    // rings twice before settling. On a nav dock people tap dozens of times a
+    // session, that reads as toy-like fast.
+    transition: { type: "spring" as const, ...SPRING.snappy },
   },
-  exit: { opacity: 0, y: 10, scale: 0.85, transition: { duration: 0.12 } },
+  exit: { opacity: 0, y: 10, scale: 0.85, transition: { duration: DURATION.quick } },
 };
 
 const reducedItemVariants = {
@@ -427,7 +436,7 @@ function IconContainer({
           <motion.span
             layoutId="dock-indicator"
             className="absolute -bottom-1 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full bg-primary"
-            transition={{ type: "spring", damping: 24, stiffness: 320 }}
+            transition={{ type: "spring", ...SPRING.snappy }}
           />
         )}
       </motion.div>

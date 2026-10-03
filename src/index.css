@@ -360,7 +360,16 @@
   border: 1px solid var(--glass-border);
   border-radius: var(--radius-lg);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 4px 16px -4px rgba(0, 0, 0, 0.06);
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  /* Was `transition: all 0.2s ...`, which also transitioned `backdrop-filter`
+     and any layout property that happened to change. On a card carrying a
+     16px backdrop blur that is a real repaint cost on every hover, and it
+     made these cards animate on a different curve from every other surface.
+     Now explicit, and on the shared tokens. */
+  transition:
+    background-color var(--aie-transition-enter),
+    border-color var(--aie-transition-enter),
+    box-shadow var(--aie-transition-enter),
+    transform var(--aie-transition-quick);
 }
 
 .glass-card:hover {
@@ -425,23 +434,139 @@
   background: rgba(128, 128, 128, 0.5);
 }
 
-/* ── Animations ──────────────────────────────────────────────── */
+/* ════════════════════════════════════════════════════════════════
+   MOTION SYSTEM
+   The CSS half of `src/lib/motion.ts`. Anything that animates without
+   going through JS should reference these variables, so a timing change
+   lands everywhere at once instead of drifting per-component.
+
+   The curves are deliberately asymmetric: `standard` starts fast and
+   settles (`cubic-bezier(.2,0,0,1)`) because it fronts loading with a
+   confident start; `exit` front-loads its travel so dismissals feel
+   finished instead of hanging around. No bounce curve exists in this
+   system, by design — see the header in motion.ts.
+   ════════════════════════════════════════════════════════════════ */
+:root {
+  /* Durations. Named for what the motion is, matching DURATION in motion.ts. */
+  --aie-dur-instant: 120ms;
+  --aie-dur-quick: 180ms;
+  --aie-dur-enter: 240ms;
+  --aie-dur-reveal: 320ms;
+  --aie-dur-transition: 420ms;
+
+  /* Curves. See the note above on why there is no overshoot option. */
+  --aie-ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --aie-ease-emphasised: cubic-bezier(0.32, 0.72, 0, 1);
+  --aie-ease-exit: cubic-bezier(0.4, 0, 1, 1);
+
+  /* Composed shorthands for the common cases. */
+  --aie-transition-quick: var(--aie-dur-quick) var(--aie-ease-standard);
+  --aie-transition-enter: var(--aie-dur-enter) var(--aie-ease-standard);
+}
+
+/* ── Entrances ───────────────────────────────────────────────── */
+
+/* Page arrival. Travel is deliberately small: this runs on every route
+   change, and a user who navigates all day should never wait on an
+   animation to get to their work. */
 @keyframes fadeInUp {
-  from { opacity: 0; transform: translateY(12px); }
+  from { opacity: 0; transform: translateY(6px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
+/* For content that enters from the side — a filtered list, a slide-over.
+   Kept separate from fadeInUp so the two never fight over transform. */
 @keyframes slideInRight {
-  from { opacity: 0; transform: translateX(16px); }
+  from { opacity: 0; transform: translateX(12px); }
   to { opacity: 1; transform: translateX(0); }
 }
 
+/* A panel that grows into place. Scale stays within 2%: past that it
+   stops reading as "arriving" and starts reading as "zooming". */
+@keyframes panelIn {
+  from { opacity: 0; transform: scale(0.98); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+/* Opacity only, for things that appear where they already live
+   (toasts, badges, inline status). No travel at all. */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
 .animate-fade-in-up {
-  animation: fadeInUp 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  animation: fadeInUp var(--aie-dur-transition) var(--aie-ease-standard) both;
 }
 
 .animate-slide-in-right {
-  animation: slideInRight 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  animation: slideInRight var(--aie-dur-enter) var(--aie-ease-standard) both;
+}
+
+.animate-panel-in {
+  animation: panelIn var(--aie-dur-reveal) var(--aie-ease-emphasised) both;
+}
+
+.animate-fade-in {
+  animation: fadeIn var(--aie-dur-enter) var(--aie-ease-standard) both;
+}
+
+/* ── Interactive surfaces ─────────────────────────────────────
+   Applied to anything clickable that is not a <button>. Centralising
+   this means every row, card and list item gets identical press and
+   focus behaviour instead of each one inventing its own. */
+.aie-interactive {
+  transition:
+    background-color var(--aie-transition-quick),
+    border-color var(--aie-transition-quick),
+    box-shadow var(--aie-transition-enter),
+    transform var(--aie-transition-quick),
+    color var(--aie-transition-quick);
+}
+
+.aie-interactive:hover {
+  transform: translateY(-1px);
+}
+
+.aie-interactive:active {
+  /* A 1px dip, not a scale. Scaling an arbitrary element changes its
+     rendered size mid-press and nudges its neighbours; translating
+     cannot. */
+  transform: translateY(0);
+  transition-duration: var(--aie-dur-instant);
+}
+
+.aie-interactive:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+/* ── Loading ────────────────────────────────────────────────── */
+
+/* A travelling sheen for skeletons. Linear and slow enough to read as
+   "working" rather than "alarming", and paused rather than removed under
+   reduced motion so the slot still reads as pending. */
+@keyframes aie-shimmer {
+  from { background-position: -180% 0; }
+  to { background-position: 180% 0; }
+}
+
+.aie-skeleton {
+  background-image: linear-gradient(
+    90deg,
+    var(--muted) 0%,
+    color-mix(in srgb, var(--muted) 55%, var(--foreground)) 45%,
+    var(--muted) 90%
+  );
+  background-size: 180% 100%;
+  animation: aie-shimmer 1.6s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .aie-skeleton {
+    animation: none;
+    background-image: none;
+  }
 }
 
 /* ════════════════════════════════════════════════════════════════
@@ -1034,5 +1159,50 @@ html.lenis body {
   .aie-letterbox,
   .aie-state-label {
     transition: none;
+  }
+}
+
+/* ════════════════════════════════════════════════════════════════
+   MOTION — reduced motion, consolidated
+   ════════════════════════════════════════════════════════════════
+   This is the authoritative catch-all, and it is last in the file so it
+   wins on order against the component-specific blocks above.
+
+   It exists because the earlier blocks were scattered and partial: they
+   covered the landing page's decorative layers but nothing in the
+   workspace app, so a reduced-motion user could still get the page
+   entrance, press lifts and hover transitions from the dashboard.
+
+   `animation: none` would be wrong here. It removes the element's
+   end-state too, so an `animation-fill-mode: both` entrance would snap
+   an element back to opacity 0 and leave it invisible. Setting duration
+   to 1ms instead lets the animation deliver its final frame
+   immediately — the content still appears, it just does not travel.
+
+   Scroll behaviour is set to `auto` rather than removed for the same
+   reason: `scroll-behavior: smooth` on the root would otherwise survive
+   and keep animating anchor jumps.
+   ════════════════════════════════════════════════════════════════ */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto !important;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  /* Lift-on-hover is the one effect that reads as motion even at 1ms,
+     because the element physically moves. Cancel it outright. */
+  .aie-interactive:hover,
+  .aie-interactive:active,
+  .glass-card:hover,
+  .aie-tilt-content {
+    transform: none !important;
   }
 }

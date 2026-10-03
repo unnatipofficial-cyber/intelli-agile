@@ -5,6 +5,7 @@ import { api } from "../convex/_generated/api";
 import IntelligencePanel from "@/components/IntelligencePanel";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
+import { staggeredEnter } from "@/lib/motion";
 import { insightSeverityStyles } from "@/lib/badge-colors";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -217,7 +218,7 @@ export default function Team() {
   }, [workload]);
 
   return (
-    <div className="space-y-6 animate-fade-in-up">
+    <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Team</h1>
@@ -251,7 +252,7 @@ export default function Team() {
               key={p._id}
               onClick={() => setSelectedProjectId(p._id)}
               className={cn(
-                "px-3 py-1.5 rounded-xl text-xs font-medium transition-all",
+                "px-3 py-1.5 rounded-xl text-xs font-medium aie-interactive",
                 selectedProjectId === p._id
                   ? "bg-primary text-primary-foreground shadow-sm"
                   : "glass-card hover:bg-accent/50"
@@ -305,7 +306,7 @@ export default function Team() {
               key={member._id}
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: i * 0.05 }}
+              transition={staggeredEnter(i)}
               className="glass-card p-5"
               style={isOverloaded ? { boxShadow: `0 0 0 2px ${insightSeverityStyles.high.text}40` } : undefined}
             >

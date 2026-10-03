@@ -2,6 +2,7 @@ import { useQuery } from "convex/react";
 import { api } from "../convex/_generated/api";
 import { Id } from "../convex/_generated/dataModel";
 import { motion } from "framer-motion";
+import { staggeredEnter } from "@/lib/motion";
 import {
   MessageSquare,
   PlusCircle,
@@ -96,7 +97,7 @@ export default function ActivityFeed({ projectId, limit = 30, showProjectName = 
             key={log._id}
             initial={{ opacity: 0, x: -8 }}
             animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: i * 0.03 }}
+            transition={staggeredEnter(i)}
             className="flex gap-3 px-3 py-2.5 rounded-lg hover:bg-muted/40 transition-colors group"
           >
             <div
