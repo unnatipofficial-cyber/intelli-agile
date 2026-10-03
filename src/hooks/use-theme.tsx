@@ -4,6 +4,35 @@ import type { ReactNode } from "react";
 export type ThemeMode = "light" | "dark";
 export type AppTheme = "graphite" | "modern-minimal" | "darkmatter";
 
+/** Where the chosen visual theme is persisted between visits. */
+export const APP_THEME_STORAGE_KEY = "aie-app-theme";
+
+/**
+ * The theme a first-time visitor gets.
+ *
+ * Only ever used when `aie-app-theme` holds nothing usable: a stored
+ * preference always wins, so switching themes and coming back keeps the
+ * choice rather than snapping to the default again.
+ */
+export const DEFAULT_APP_THEME: AppTheme = "darkmatter";
+
+/**
+ * Reads a previously saved theme preference.
+ *
+ * Returns `null` when there is nothing usable stored — no key, an
+ * unrecognised value, or no DOM (server render). The caller then decides what
+ * the fallback is, which keeps "no saved preference" a single, explicit branch
+ * rather than a hard-coded default buried in three places.
+ */
+export function readStoredAppTheme(
+  storage: Pick<Storage, "getItem"> | null = typeof window === "undefined" ? null : window.localStorage,
+): AppTheme | null {
+  if (!storage) return null;
+  const stored = storage.getItem(APP_THEME_STORAGE_KEY);
+  if (stored === "graphite" || stored === "modern-minimal" || stored === "darkmatter") return stored;
+  return null;
+}
+
 interface ThemeContextValue {
   /** Light or dark mode — the mode actually applied to <html>. */
   theme: ThemeMode;
@@ -24,7 +53,7 @@ interface ThemeContextValue {
 const ThemeContext = createContext<ThemeContextValue>({
   theme: "light",
   toggleTheme: () => {},
-  appTheme: "graphite",
+  appTheme: DEFAULT_APP_THEME,
   setAppTheme: () => {},
   darkOnly: false,
   setDarkOnly: () => {},
@@ -40,7 +69,7 @@ const ThemeContext = createContext<ThemeContextValue>({
  * driven by `useDarkSurface` on the page itself.
  */
 export function isDarkSurfaceRoute(pathname: string): boolean {
-  return pathname === "/" || pathname.startsWith("/auth");
+  return pathname === "/" || pathname === "/guide" || pathname.startsWith("/auth");
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
@@ -60,13 +89,9 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   });
 
   /* ── App theme variant ────────────────────────────────────── */
-  const [appTheme, setAppThemeState] = useState<AppTheme>(() => {
-    if (typeof window !== "undefined") {
-      const stored = localStorage.getItem("aie-app-theme");
-      if (stored === "graphite" || stored === "modern-minimal" || stored === "darkmatter") return stored;
-    }
-    return "graphite";
-  });
+  const [appTheme, setAppThemeState] = useState<AppTheme>(
+    () => readStoredAppTheme() ?? DEFAULT_APP_THEME,
+  );
 
   /* ── Sync to DOM ──────────────────────────────────────────── */
   useEffect(() => {
@@ -77,7 +102,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     root.setAttribute("data-theme", appTheme);
     // Only the user's own choice is persisted; the dark-only pin is transient.
     localStorage.setItem("aie-mode", theme);
-    localStorage.setItem("aie-app-theme", appTheme);
+    localStorage.setItem(APP_THEME_STORAGE_KEY, appTheme);
   }, [theme, appTheme, darkOnly]);
 
   const toggleTheme = () => setTheme((t) => (t === "light" ? "dark" : "light"));
@@ -102,14 +127,16 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
 export function useTheme() {
   return useContext(ThemeContext);
-}  /**
-   * Pins the app to the dark surface for as long as the calling page is mounted.
-   *
-   * Used by the public pages (landing, sign in) which are dark-only in every
-   * appearance theme. The user's stored `aie-mode` is never modified, so the
-   * dashboard and every other page keep working with light, dark or either
-   * appearance theme exactly as before.
-   */
+}/**
+ * Pins the app to the dark surface for as long as the calling page is mounted.
+ *
+ * Used by the public pages (landing, guide, sign in), which are authored
+ * against a night sky and therefore render the dark variant of whatever visual
+ * theme is active. The palette itself is *not* pinned — that is what lets the
+ * theme selector stay in sync with the rest of the app — and the user's stored
+ * `aie-mode` is never modified, so the dashboard keeps working with light,
+ * dark or either appearance exactly as before.
+ */
 export function useDarkSurface() {
   const { setDarkOnly } = useTheme();
 
@@ -117,36 +144,4 @@ export function useDarkSurface() {
     setDarkOnly(true);
     return () => setDarkOnly(false);
   }, [setDarkOnly]);
-}
-
-/**
- * Pins the app to the dark **graphite** surface for as long as the calling page
- * is mounted — the landing page's cinematic Earth sequence is authored against
- * the graphite palette specifically, so the whole page is always graphite on the
- * public pages, regardless of whatever the user may have saved on their device.
- *
- * The transient pin touches neither the stored `aie-mode` nor the stored
- * `aie-app-theme`: the dashboard and every other page keep behaving exactly as
- * before once this page unmounts.
- */
-export function useGraphiteSurface() {
-  const { appTheme, setDarkOnly, setAppTheme } = useTheme();
-
-  useEffect(() => {
-    // Captured on mount so the visitor's own appearance theme survives the
-    // landing page instead of being flattened to graphite for good.
-    const restoreTo = appTheme;
-    setDarkOnly(true);
-    // Always graphite for the duration of this page. The hook is only ever
-    // called from the public marketing pages (landing and the product guide),
-    // which share the graphite starfield chrome.
-    setAppTheme("graphite");
-    return () => {
-      setDarkOnly(false);
-      setAppTheme(restoreTo);
-    };
-    // appTheme is deliberately not a dependency: it is the value to restore,
-    // read once when the page mounts.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [setDarkOnly, setAppTheme]);
 }

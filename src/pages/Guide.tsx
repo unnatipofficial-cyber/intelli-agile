@@ -15,6 +15,7 @@ import {
   Target,
 } from "lucide-react";
 import { AIELogo } from "@/components/AIELogo";
+import { ThemeSwitcher } from "@/components/ThemeSwitcher";
 import { AnimatedCounter } from "@/components/landing/AnimatedCounter";
 import { CustomCursor } from "@/components/landing/CustomCursor";
 import { DepthTransition } from "@/components/landing/DepthTransition";
@@ -37,7 +38,7 @@ import { Button } from "@/components/ui/button";
 import { usePointerMode } from "@/hooks/use-pointer-mode";
 import { useScrollSpine } from "@/hooks/use-scroll-spine";
 import { useSmoothScroll } from "@/hooks/use-smooth-scroll";
-import { useGraphiteSurface } from "@/hooks/use-theme";
+import { useDarkSurface } from "@/hooks/use-theme";
 import { useThemePalette } from "@/hooks/use-theme-palette";
 import { pageVariants } from "@/lib/motion-variants";
 import { cn } from "@/lib/utils";
@@ -199,10 +200,10 @@ export default function Guide() {
   const { scrollTo } = useSmoothScroll();
   const spine = useScrollSpine<HTMLDivElement>();
 
-  // Same contract as the landing page: the guide is a public marketing page,
-  // so it pins the graphite surface for its duration and restores the
-  // visitor's own appearance theme on the way out.
-  useGraphiteSurface();
+  // Same contract as the landing page: the guide is a public page authored
+  // against a night sky, so it renders the dark variant of the active theme —
+  // and shares that theme, rather than holding a second one of its own.
+  useDarkSurface();
 
   const [activeSection, setActiveSection] = useState(GUIDE_SECTIONS[0].id);
 
@@ -287,6 +288,7 @@ export default function Guide() {
             </div>
 
             <div className="flex items-center gap-2">
+              <ThemeSwitcher className="mr-1" />
               <Button variant="ghost" size="sm" onClick={() => navigate("/")} data-cursor="hover">
                 Home
               </Button>

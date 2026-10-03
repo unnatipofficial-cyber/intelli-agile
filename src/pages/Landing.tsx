@@ -23,6 +23,7 @@ import { lazy, Suspense, useCallback, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { useNavigate } from "react-router";
 import { AIELogo } from "@/components/AIELogo";
+import { ThemeSwitcher } from "@/components/ThemeSwitcher";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AnimatedCounter } from "@/components/landing/AnimatedCounter";
 import { CustomCursor } from "@/components/landing/CustomCursor";
@@ -37,7 +38,7 @@ import { Button } from "@/components/ui/button";
 import { usePointerMode } from "@/hooks/use-pointer-mode";
 import { useScrollSpine } from "@/hooks/use-scroll-spine";
 import { useSmoothScroll } from "@/hooks/use-smooth-scroll";
-import { useGraphiteSurface } from "@/hooks/use-theme";
+import { useDarkSurface } from "@/hooks/use-theme";
 import { useThemePalette } from "@/hooks/use-theme-palette";
 import type { HeroSubject } from "@/components/landing/Hero3DScene";
 import { supportsWebGL } from "@/lib/motion-prefs";
@@ -223,9 +224,11 @@ export default function Landing() {
   const pointer = usePointerMode();
   const { scrollTo } = useSmoothScroll();
 
-  // The landing page is pinned to the graphite surface in both directions; the
-  // light/dark preference still applies everywhere else in the app.
-  useGraphiteSurface();
+  // The landing page is authored against a night sky, so it renders the dark
+  // variant of whatever theme is active. The palette is *not* pinned — that is
+  // what keeps the navbar theme switcher in sync with the rest of the app —
+  // and the visitor's saved light/dark preference is untouched.
+  useDarkSurface();
 
   // The hero subject is fixed rather than swapped per appearance theme.
   const subject: HeroSubject = "solar";
@@ -309,6 +312,7 @@ export default function Landing() {
           </div>
 
           <div className="flex items-center gap-2">
+            <ThemeSwitcher className="mr-1" />
             <Button
               variant="outline"
               size="sm"
