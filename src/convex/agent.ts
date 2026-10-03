@@ -85,7 +85,7 @@ function hasThoughtSignature(part: GeminiPart): boolean {
   return Boolean((part.functionCall as GeminiFunctionCall | undefined)?.thought_signature ?? false);
 }
 
-export { hasThoughtSignature };
+export { hasThoughtSignature, injectThoughtSignatureIntoContents };
 
 /**
  * Validates that every function-call part carries `thought_signature`.
@@ -977,11 +977,12 @@ async function callGemini(
   for (const model of MODELS) {
     for (let attempt = 0; attempt < 2; attempt += 1) {
       try {
-        // Inject thought_signature into every functionCall part before the
-        // request leaves our server. This is where the platform-side
-        // wrapper's omission becomes a 400, and the only place we can fix it.
+        // Every functionCall part must carry thought_signature, or Gemini
+        // rejects the whole request with a 400. Rebuild `contents` through
+        // the injector, but keep the rest of the envelope intact — the API
+        // requires the root to be a request object, not a bare array.
         const payload = {
-          contents,
+          contents: injectThoughtSignatureIntoContents(contents),
           ...(options.tools ? { tools: options.tools } : {}),
           ...(options.forceTools
             ? { toolConfig: { functionCallingConfig: { mode: "ANY" } } }
@@ -994,7 +995,7 @@ async function callGemini(
             temperature: 0.3,
           },
         };
-        const body = JSON.stringify(injectThoughtSignatureIntoContents(payload.contents));
+        const body = JSON.stringify(payload);
 
         const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
         const response = await fetch(url, {
