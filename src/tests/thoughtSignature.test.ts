@@ -1,138 +1,85 @@
 import { describe, expect, test } from "bun:test";
-import {
-  hasThoughtSignature,
-  injectThoughtSignatureIntoContents,
-} from "../convex/agent";
+import { toFunctionCallParts } from "../convex/agent";
 
 /**
- * Tests for the pure `hasThoughtSignature` predicate. The companion
- * internal action `verifyFunctionCallSignature` runs the same predicate over
- * every part and is exercised at runtime by `bunx convex dev --once`.
+ * `thought_signature` is an OUTPUT of the model, not an input we generate.
+ *
+ * Two failures motivated these tests:
+ *
+ *  1. Dropping it while rebuilding the model turn made Gemini reject the call
+ *     with `400 - Function call is missing a thought_signature in functionCall
+ *     parts`. The streamed path was the culprit: it captured only
+ *     `{name, args}` and rebuilt the part without the signature.
+ *  2. Fabricating a placeholder made Gemini reject the field *name* with
+ *     `400 - Unknown name "thought_signature"`, because the REST API does not
+ *     accept the field as something a caller may set.
+ *
+ * So the only correct behaviour is: echo exactly what the model returned, and
+ * otherwise leave the part alone.
  */
-describe("hasThoughtSignature", () => {
-  test("detects a part that carries thought_signature", () => {
-    expect(
-      hasThoughtSignature({
-        functionCall: {
-          name: "list_projects",
-          args: {},
-          thought_signature: "abc123",
-        },
-      } as any)
-    ).toBe(true);
-  });
-
-  test("returns false for a functionCall part without thought_signature", () => {
-    expect(
-      hasThoughtSignature({
-        functionCall: {
-          name: "list_projects",
-          args: {},
-        },
-      } as any)
-    ).toBe(false);
-  });
-
-  test("returns false for a text-only part", () => {
-    expect(
-      hasThoughtSignature({ text: "hello" } as any)
-    ).toBe(false);
-  });
-
-  test("returns false when functionCall is undefined", () => {
-    expect(hasThoughtSignature({ text: "hello" } as any)).toBe(false);
-  });
-
-  test("returns false when functionCall.thought_signature is empty", () => {
-    expect(
-      hasThoughtSignature({
-        functionCall: {
-          name: "list_projects",
-          args: {},
-          thought_signature: "",
-        },
-      } as any)
-    ).toBe(false);
-  });
-});
-
-describe("injectThoughtSignatureIntoContents", () => {
-  test("returns a contents array, never the bare request payload", () => {
-    // Regression: an earlier revision passed the *whole* payload through this
-    // helper, so the request body was a bare array and Gemini rejected it with
-    // `400 - Root element must be a message`. The helper must only ever be
-    // applied to `contents`, with the caller keeping the envelope.
-    const contents = [
-      { role: "user" as const, parts: [{ text: "hello" }] },
-    ];
-    const out = injectThoughtSignatureIntoContents(contents as any);
-    expect(Array.isArray(out)).toBe(true);
-    expect(out).toHaveLength(1);
-    expect(out[0].role).toBe("user");
-  });
-
-  test("attaches thought_signature to every functionCall part", () => {
-    const contents = [
+describe("toFunctionCallParts", () => {
+  test("echoes back the signature the model returned", () => {
+    const parts = toFunctionCallParts([
       {
-        role: "model" as const,
-        parts: [
-          { text: "thinking" },
-          { functionCall: { name: "list_risks", args: { project: "Apollo" } } },
-        ],
+        name: "list_risks",
+        args: { project: "Apollo" },
+        thoughtSignature: "Cq0BdGh...",
       },
-    ];
-    const out = injectThoughtSignatureIntoContents(contents as any);
-    const callPart = out[0].parts[1] as any;
-    expect(typeof callPart.functionCall.thought_signature).toBe("string");
-    expect(callPart.functionCall.thought_signature.length).toBeGreaterThan(0);
+    ] as any);
+    expect(parts[0].functionCall?.thought_signature).toBe("Cq0BdGh...");
   });
 
-  test("preserves an existing signature rather than overwriting it", () => {
-    const contents = [
+  test("preserves name and args alongside the signature", () => {
+    const parts = toFunctionCallParts([
       {
-        role: "model" as const,
-        parts: [
-          {
-            functionCall: {
-              name: "list_risks",
-              args: {},
-              thought_signature: "real-signature",
-            },
-          },
-        ],
+        name: "list_risks",
+        args: { project: "Apollo", status: "open" },
+        thoughtSignature: "sig-123",
       },
-    ];
-    const out = injectThoughtSignatureIntoContents(contents as any);
-    expect((out[0].parts[0] as any).functionCall.thought_signature).toBe(
-      "real-signature"
-    );
-  });
-
-  test("does not mutate the caller's objects", () => {
-    const contents = [
-      {
-        role: "model" as const,
-        parts: [{ functionCall: { name: "list_team", args: {} } }],
-      },
-    ];
-    injectThoughtSignatureIntoContents(contents as any);
-    expect(
-      (contents[0].parts[0] as any).functionCall.thought_signature
-    ).toBeUndefined();
-  });
-
-  test("serialises into a request envelope whose root is an object", () => {
-    // The exact shape Gemini's generateContent endpoint requires.
-    const contents = [{ role: "user" as const, parts: [{ text: "hi" }] }];
-    const body = JSON.stringify({
-      contents: injectThoughtSignatureIntoContents(contents as any),
-      tools: [{ functionDeclarations: [] }],
-      systemInstruction: { parts: [{ text: "sys" }] },
+    ] as any);
+    expect(parts[0].functionCall?.name).toBe("list_risks");
+    expect(parts[0].functionCall?.args).toEqual({
+      project: "Apollo",
+      status: "open",
     });
-    const parsed = JSON.parse(body);
-    expect(Array.isArray(parsed)).toBe(false);
-    expect(Array.isArray(parsed.contents)).toBe(true);
-    expect(parsed.tools).toBeDefined();
-    expect(parsed.systemInstruction).toBeDefined();
+  });
+
+  test("omits the field entirely when the model sent no signature", () => {
+    // Fabricating a value here is what produced `Unknown name
+    // "thought_signature"`, so the key must be absent, never invented.
+    const parts = toFunctionCallParts([
+      { name: "list_team", args: {} },
+    ] as any);
+    expect(parts[0].functionCall).not.toHaveProperty("thought_signature");
+  });
+
+  test("treats an empty signature as absent rather than echoing it", () => {
+    const parts = toFunctionCallParts([
+      { name: "list_team", args: {}, thoughtSignature: "" },
+    ] as any);
+    expect(parts[0].functionCall).not.toHaveProperty("thought_signature");
+  });
+
+  test("keeps every call in the turn, each with its own signature", () => {
+    const parts = toFunctionCallParts([
+      { name: "list_risks", args: { a: 1 }, thoughtSignature: "sig-a" },
+      { name: "list_team", args: { b: 2 }, thoughtSignature: "sig-b" },
+    ] as any);
+    expect(parts).toHaveLength(2);
+    expect((parts[0].functionCall as any).thought_signature).toBe("sig-a");
+    expect((parts[1].functionCall as any).thought_signature).toBe("sig-b");
+  });
+
+  test("round-trips through JSON without altering the signature", () => {
+    const opaque = "Ct8BdGhlAHdUaWNlbi1zaWduYXR1cmU=";
+    const parts = toFunctionCallParts([
+      { name: "create_risk", args: {}, thoughtSignature: opaque },
+    ] as any);
+    const parsed = JSON.parse(JSON.stringify(parts));
+    expect(parsed[0].functionCall.thought_signature).toBe(opaque);
+  });
+
+  test("returns an empty turn when the model made no calls", () => {
+    expect(toFunctionCallParts([] as any)).toEqual([]);
   });
 });

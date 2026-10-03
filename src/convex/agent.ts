@@ -40,6 +40,15 @@ const MAX_STEPS = 10;
 interface ToolCall {
   name: string;
   args: Record<string, unknown>;
+  /**
+   * Opaque signature the model attached to this call. It is an OUTPUT of the
+   * model, not something we generate: Gemini requires it echoed verbatim on the
+   * matching `functionCall` part of the next request, and rejects the whole
+   * call if it is absent. Fabricating a value makes the API reject the field
+   * name outright ("Unknown name thought_signature"), so we only ever pass
+   * back what the model actually gave us.
+   */
+  thoughtSignature?: string;
 }
 
 interface GeminiFunctionCall {
@@ -72,40 +81,6 @@ const NAMED = {
   },
   required: ["project"],
 };
-
-/* ── Defensive signature guard ──
- * Gemini's newer generations require `thought_signature` on every
- * `functionCall` part. The platform's tool-call wrapper can emit a
- * `functionCall` part without it, which produces the 400 we are chasing.
- * This action verifies any part we receive, and the injection below
- * guarantees the part we send always carries one.
- */
-
-function hasThoughtSignature(part: GeminiPart): boolean {
-  return Boolean((part.functionCall as GeminiFunctionCall | undefined)?.thought_signature ?? false);
-}
-
-export { hasThoughtSignature, injectThoughtSignatureIntoContents };
-
-/**
- * Validates that every function-call part carries `thought_signature`.
- * Throws a clean 400 with a specific message instead of letting Gemini
- * reject the request with a platform-side error we cannot act on.
- */
-export const verifyFunctionCallSignature = internalAction({
-  args: { parts: v.array(v.any()) },
-  handler: (ctx, args) => {
-    const parts = args.parts as GeminiPart[];
-    for (const part of parts) {
-      if (part.functionCall && !hasThoughtSignature(part)) {
-        throw new Error(
-          "Function call part is missing thought_signature. " +
-            "The model tool layer omitted it; retry the turn.",
-        );
-      }
-    }
-  },
-});
 
 const TOOLS = [
   {
@@ -937,35 +912,24 @@ function isDegenerate(data: any): boolean {
 }
 
 /**
- * Gemini requires `thought_signature` on every `functionCall` part. This
- * operation is applied to the `contents` array inside the request payload,
- * so every `functionCall` part is copied with its signature attached before
- * the request can be rejected by the platform with a
- * missing-thought_signature error. The caller's objects are never mutated.
+ * Rebuilds the `functionCall` parts for a model turn, echoing back the
+ * `thought_signature` the model returned. The signature is opaque and must be
+ * passed through untouched — inventing one makes Gemini reject the field name,
+ * and dropping one makes it reject the call as unsigned.
  */
-function injectThoughtSignatureIntoContents(contents: GeminiContent[]): GeminiContent[] {
-  const out: GeminiContent[] = [];
-  for (const c of contents) {
-    const outPart: GeminiPart[] = [];
-    for (const part of c.parts) {
-      const clone: GeminiPart = { ...part };
-      if (part.functionCall) {
-        clone.functionCall = { ...part.functionCall };
-        // Passthrough the caller's signature. If the caller omitted it
-        // (which produced the 400), we default to a stable placeholder
-        // so the wire request is well-formed. The platform re-signs on the
-        // wire; we never send a request without a signature on a tool part.
-        const fc = clone.functionCall as GeminiFunctionCall;
-        if (fc.thought_signature === undefined) {
-          fc.thought_signature = "__generated__";
-        }
-      }
-      outPart.push(clone);
-    }
-    out.push({ ...c, parts: outPart });
-  }
-  return out;
+function toFunctionCallParts(calls: ToolCall[]): GeminiPart[] {
+  return calls.map((call) => ({
+    functionCall: {
+      name: call.name,
+      args: call.args,
+      ...(call.thoughtSignature
+        ? { thought_signature: call.thoughtSignature }
+        : {}),
+    },
+  }));
 }
+
+export { toFunctionCallParts };
 
 async function callGemini(
   apiKey: string,
@@ -977,12 +941,8 @@ async function callGemini(
   for (const model of MODELS) {
     for (let attempt = 0; attempt < 2; attempt += 1) {
       try {
-        // Every functionCall part must carry thought_signature, or Gemini
-        // rejects the whole request with a 400. Rebuild `contents` through
-        // the injector, but keep the rest of the envelope intact — the API
-        // requires the root to be a request object, not a bare array.
         const payload = {
-          contents: injectThoughtSignatureIntoContents(contents),
+          contents,
           ...(options.tools ? { tools: options.tools } : {}),
           ...(options.forceTools
             ? { toolConfig: { functionCallingConfig: { mode: "ANY" } } }
@@ -1071,7 +1031,7 @@ async function streamGemini(
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      contents: injectThoughtSignatureIntoContents(contents),
+      contents,
       tools: TOOLS,
       ...(options.forceTools
         ? { toolConfig: { functionCallingConfig: { mode: "ANY" } } }
@@ -1116,15 +1076,16 @@ async function streamGemini(
           calls.push({
             name: part.functionCall.name,
             args: part.functionCall.args ?? {},
+            // Keep the model's signature so the rebuilt part can be echoed
+            // back on the next request.
+            thoughtSignature: part.functionCall.thought_signature,
           });
         }
       }
     }
   }
 
-  const parts: GeminiPart[] = calls.map((call) => ({
-    functionCall: { name: call.name, args: call.args },
-  }));
+  const parts: GeminiPart[] = toFunctionCallParts(calls);
   if (text.trim()) parts.push({ text });
   if (!parts.length) throw new Error("Gemini stream produced no usable parts.");
   return parts;
