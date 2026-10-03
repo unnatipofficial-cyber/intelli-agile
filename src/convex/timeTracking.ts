@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
+import type { Doc, Id } from "./_generated/dataModel";
 
 export const listByTask = query({
   args: { taskId: v.id("tasks") },
@@ -89,6 +90,73 @@ export const removeEntry = mutation({
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new Error("Not authenticated");
     await ctx.db.delete(args.entryId);
+  },
+});
+
+/**
+ * Time logged against the tasks of one sprint.
+ *
+ * `getProjectSummary` answers "how long has this project taken so far", which
+ * is the wrong question for a retrospective: a retro is about *one* sprint, so
+ * comparing its actuals against that sprint's committed points is only
+ * honest if the entries are scoped the same way. Entries carry no sprintId —
+ * they hang off the task — so the sprint's tasks are collected first and used
+ * as the filter.
+ *
+ * Names are resolved here rather than left as ids so the retro page can label
+ * a chart without a second round trip.
+ */
+export const getSprintSummary = query({
+  args: { sprintId: v.id("sprints") },
+  handler: async (ctx, args) => {
+    const tasks = await ctx.db
+      .query("tasks")
+      .withIndex("by_sprint", (q) => q.eq("sprintId", args.sprintId))
+      .collect();
+
+    const entries: Doc<"timeEntries">[] = [];
+    for (const task of tasks) {
+      const taskEntries = await ctx.db
+        .query("timeEntries")
+        .withIndex("by_task", (q) => q.eq("taskId", task._id))
+        .collect();
+      entries.push(...taskEntries);
+    }
+
+    const totalMinutes = entries.reduce((sum, entry) => sum + entry.minutes, 0);
+
+    // One pass over the entries, then one read per distinct person/task, so the
+    // number of database reads does not grow with the number of entries.
+    const minutesByUser = new Map<Id<"users">, number>();
+    const minutesByTask = new Map<Id<"tasks">, number>();
+    for (const entry of entries) {
+      minutesByUser.set(entry.userId, (minutesByUser.get(entry.userId) ?? 0) + entry.minutes);
+      minutesByTask.set(entry.taskId, (minutesByTask.get(entry.taskId) ?? 0) + entry.minutes);
+    }
+
+    const byUser = await Promise.all(
+      [...minutesByUser.entries()].map(async ([userId, minutes]) => {
+        const user = await ctx.db.get(userId);
+        return { userId, userName: user?.name || "Unknown", minutes };
+      }),
+    );
+
+    const byTask = await Promise.all(
+      [...minutesByTask.entries()].map(async ([taskId, minutes]) => {
+        const task = await ctx.db.get(taskId);
+        return {
+          taskId,
+          title: task?.title || "Deleted task",
+          minutes,
+          status: task?.status ?? "todo",
+        };
+      }),
+    );
+
+    byUser.sort((a, b) => b.minutes - a.minutes);
+    byTask.sort((a, b) => b.minutes - a.minutes);
+
+    return { totalMinutes, entryCount: entries.length, byUser, byTask };
   },
 });
 

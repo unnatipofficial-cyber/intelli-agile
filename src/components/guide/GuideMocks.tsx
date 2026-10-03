@@ -909,3 +909,110 @@ export function SettingsMock() {
     </motion.div>
   );
 }
+
+/* ── 11. Retrospective ─────────────────────────────────────────── */
+
+const retroColumns = [
+  {
+    title: "What Went Well",
+    tone: "success" as const,
+    items: ["Pairing on the payment fix", "Daily deploys stayed uneventful"],
+  },
+  {
+    title: "To Improve",
+    tone: "warning" as const,
+    items: ["Scope added mid-sprint", "Review queue waited two days"],
+  },
+  {
+    title: "Action Items",
+    tone: "primary" as const,
+    items: ["Split stories over 8 SP", "Review SLA of one day"],
+  },
+];
+
+export function RetroMock() {
+  return (
+    <motion.div variants={group} initial="hidden" whileInView="show" viewport={VIEWPORT} className="space-y-3">
+      <motion.div variants={rise} className="flex items-center justify-between gap-2">
+        <div className="min-w-0">
+          <p className="truncate text-sm font-bold">Sprint 15 debrief</p>
+          <p className="text-[10px] text-muted-foreground">42 / 58 SP · 46h logged</p>
+        </div>
+        <div className="relative h-10 w-10 shrink-0">
+          <svg viewBox="0 0 80 80" className="h-full w-full -rotate-90" aria-hidden="true">
+            <circle cx="40" cy="40" r="33" fill="none" strokeWidth="10" className="text-muted/60" stroke="currentColor" />
+            <motion.circle
+              cx="40"
+              cy="40"
+              r="33"
+              fill="none"
+              strokeWidth="10"
+              strokeLinecap="round"
+              className="text-primary"
+              stroke="currentColor"
+              variants={draw}
+            />
+          </svg>
+          <span className="absolute inset-0 flex items-center justify-center text-[9px] font-bold">
+            72%
+          </span>
+        </div>
+      </motion.div>
+
+      <div className="grid gap-2 sm:grid-cols-3">
+        {retroColumns.map((column) => (
+          <motion.div
+            key={column.title}
+            variants={rise}
+            className="rounded-xl border border-border/50 bg-muted/20 p-2.5"
+          >
+            <div className="mb-2 flex items-center gap-1.5">
+              <span className="truncate text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                {column.title}
+              </span>
+              <Chip tone={column.tone} className="ml-auto">
+                {column.items.length}
+              </Chip>
+            </div>
+            <div className="space-y-1.5">
+              {column.items.map((item) => (
+                <motion.p
+                  key={item}
+                  variants={rise}
+                  className="rounded-lg border border-border/50 bg-card/70 px-2 py-1.5 text-[10px] leading-snug"
+                >
+                  {item}
+                </motion.p>
+              ))}
+            </div>
+          </motion.div>
+        ))}
+      </div>
+
+      <motion.div variants={rise} className="rounded-xl border border-border/60 bg-card/40 p-3">
+        <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+          Where the time went
+        </p>
+        <div className="mt-2 space-y-2">
+          {[
+            { who: "Sam K.", minutes: "16h", share: 88 },
+            { who: "Ada L.", minutes: "14h", share: 76 },
+            { who: "Mira P.", minutes: "9h", share: 49 },
+          ].map((row) => (
+            <div key={row.who} className="flex items-center gap-2">
+              <span className="w-14 shrink-0 truncate text-[10px]">{row.who}</span>
+              <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted/60">
+                <motion.div
+                  variants={growX}
+                  className="h-full origin-left rounded-full bg-chart-2"
+                  style={{ width: `${row.share}%` }}
+                />
+              </div>
+              <span className="w-8 shrink-0 text-right text-[9px] text-muted-foreground">{row.minutes}</span>
+            </div>
+          ))}
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+}

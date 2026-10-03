@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { GUIDE_CARDS, GUIDE_SECTIONS } from "../components/guide/guide-content";
+import { GUIDE_CARDS, GUIDE_SECTIONS, sectionRoutes } from "../components/guide/guide-content";
+import { dockNavItems } from "../components/FloatingDock";
 
 /**
  * The guide must stay an honest table of contents for the product: one entry
@@ -9,7 +10,7 @@ import { GUIDE_CARDS, GUIDE_SECTIONS } from "../components/guide/guide-content";
  */
 describe("guide content", () => {
   test("covers every section exactly once", () => {
-    expect(GUIDE_SECTIONS).toHaveLength(10);
+    expect(GUIDE_SECTIONS).toHaveLength(11);
     const ids = GUIDE_SECTIONS.map((section) => section.id);
     const navs = GUIDE_SECTIONS.map((section) => section.nav);
     expect(new Set(ids).size).toBe(GUIDE_SECTIONS.length);
@@ -50,9 +51,19 @@ describe("guide content", () => {
     });
   });
 
-  test("position numbers run 01..10 in reading order", () => {
+  test("position numbers run 01..11 in reading order", () => {
     GUIDE_SECTIONS.forEach((section, index) => {
       expect(section.index).toBe(String(index + 1).padStart(2, "0"));
     });
+  });
+
+  test("documents every destination in the app navigation", () => {
+    // The guide claims to be a tour of the product. If a page ships and is
+    // never added here, the guide quietly stops being true — which is exactly
+    // how the retro page ended up built but unreachable.
+    const documented = new Set(GUIDE_SECTIONS.flatMap((section) => sectionRoutes(section)));
+    for (const item of dockNavItems) {
+      expect(documented, `guide is missing a section for ${item.path}`).toContain(item.path);
+    }
   });
 });

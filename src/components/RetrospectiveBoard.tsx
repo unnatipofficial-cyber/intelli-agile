@@ -10,32 +10,39 @@ interface RetroBoardProps {
   projectId: Id<"projects">;
 }
 
+/**
+ * Column treatments run on theme tokens rather than fixed palette names.
+ * Emerald/amber/blue are literal Tailwind colours: they ignore the active
+ * theme entirely, which is exactly how a board ends up looking pasted onto
+ * the page. `chart-1`/`chart-3`/`primary` carry the same semantics — positive,
+ * caution, act — and re-tint with the theme.
+ */
 const columns = [
   {
     key: "wentWell" as const,
     title: "What Went Well",
     icon: <ThumbsUp className="w-4 h-4" />,
-    color: "text-emerald-500",
-    bgColor: "bg-emerald-500/5",
-    borderColor: "border-emerald-500/20",
+    color: "text-chart-1",
+    bgColor: "bg-chart-1/5",
+    borderColor: "border-chart-1/25",
     placeholder: "What did the team do well?",
   },
   {
     key: "toImprove" as const,
     title: "To Improve",
     icon: <AlertCircle className="w-4 h-4" />,
-    color: "text-amber-500",
-    bgColor: "bg-amber-500/5",
-    borderColor: "border-amber-500/20",
+    color: "text-chart-3",
+    bgColor: "bg-chart-3/5",
+    borderColor: "border-chart-3/25",
     placeholder: "What could be better?",
   },
   {
     key: "actionItems" as const,
     title: "Action Items",
     icon: <Zap className="w-4 h-4" />,
-    color: "text-blue-500",
-    bgColor: "bg-blue-500/5",
-    borderColor: "border-blue-500/20",
+    color: "text-primary",
+    bgColor: "bg-primary/5",
+    borderColor: "border-primary/25",
     placeholder: "What will we do differently?",
   },
 ];

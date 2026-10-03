@@ -9,6 +9,7 @@ import {
   Layers,
   LayoutDashboard,
   ListTodo,
+  MessageSquare,
   Settings as SettingsIcon,
   ShieldAlert,
   Sparkles,
@@ -27,6 +28,7 @@ import {
   MockFrame,
   ProjectsMock,
   RiskMatrixMock,
+  RetroMock,
   SettingsMock,
   TasksMock,
   TeamMock,
@@ -57,6 +59,12 @@ export interface GuideSection {
   headline: string;
   /** Real route inside the app. */
   route: string;
+  /**
+   * Every route this section documents, when it covers more than one page.
+   * `route` stays the primary destination; this is what the coverage test
+   * checks, so a page cannot ship undocumented.
+   */
+  routes?: string[];
   /** Fake address-bar text for the mock frame. */
   url: string;
   /** Cover photo for the carousel card. */
@@ -253,6 +261,7 @@ export const GUIDE_SECTIONS: GuideSection[] = [
     title: "Analytics & Reports",
     headline: "Six views of the same truth — plus a report to share",
     route: "/dashboard/analytics",
+    routes: ["/dashboard/analytics", "/dashboard/reports"],
     url: "aie.app/dashboard/analytics",
     image: unsplash("photo-1460925895917-afdab827c52f"),
     icon: BarChart3,
@@ -294,9 +303,34 @@ export const GUIDE_SECTIONS: GuideSection[] = [
     mock: <IntelligenceMock />,
   },
   {
+    id: "retro",
+    nav: "Retro",
+    index: "10",
+    category: "Delivery",
+    title: "Retrospective",
+    headline: "Close the sprint loop with evidence, not memory",
+    route: "/dashboard/retro",
+    url: "aie.app/dashboard/retro",
+    image: unsplash("photo-1552664730-d307ca884978"),
+    icon: MessageSquare,
+    lede: "The step that turns a finished sprint into a better one. Retrospective puts the delivered points, the time your team actually spent and the team’s own words in one place — then carries the action items into the next sprint.",
+    youDo: [
+      "Pick the sprint you are debriefing",
+      "Fill three columns: what went well, to improve, action items",
+      "See committed vs. delivered points and where the hours went",
+      "Carry the action items into the next backlog",
+    ],
+    itDoes: [
+      "Scopes time and points to that sprint alone, so the comparison is honest",
+      "Reads effort per delivered point, which is what makes the next estimate real",
+      "Keeps every retro on the record, so patterns repeat themselves",
+    ],
+    mock: <RetroMock />,
+  },
+  {
     id: "settings",
     nav: "Settings",
-    index: "10",
+    index: "11",
     category: "Workspace",
     title: "Settings",
     headline: "Your profile, your look, your people — under control",
@@ -321,6 +355,11 @@ export const GUIDE_SECTIONS: GuideSection[] = [
 ];
 
 /* ── Shared pieces of a section explanation ───────────────────── */
+
+/** Every app route a section covers. */
+export function sectionRoutes(section: GuideSection): string[] {
+  return section.routes ?? [section.route];
+}
 
 /** The two "you do / AIE does" lists. */
 export function SectionLists({ section }: { section: GuideSection }) {
@@ -390,8 +429,9 @@ export function SectionCTA({ section, variant = "default" }: { section: GuideSec
   );
 }
 
-/** Full explanation used inside the carousel card’s modal. */
+/** Full explanation used inside the carousel card's modal. */
 export function SectionGuideContent({ section }: { section: GuideSection }) {
+  const navigate = useNavigate();
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <p className="text-sm leading-relaxed text-muted-foreground sm:text-base">{section.lede}</p>
@@ -399,6 +439,13 @@ export function SectionGuideContent({ section }: { section: GuideSection }) {
       <SectionMock section={section} />
       <div className="flex flex-wrap items-center gap-3 border-t border-border/50 pt-5">
         <SectionCTA section={section} />
+        {sectionRoutes(section)
+          .filter((route) => route !== section.route)
+          .map((route) => (
+            <Button key={route} variant="outline" onClick={() => navigate(route)} className="gap-1.5">
+              Open {route.split("/").pop()} <ArrowRight className="h-4 w-4" />
+            </Button>
+          ))}
         <p className="text-xs text-muted-foreground">
           Signed out? AIE will ask you to sign in and bring you right back here.
         </p>

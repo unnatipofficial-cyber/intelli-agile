@@ -25,6 +25,7 @@ const Team = lazy(() => import("./pages/Team.tsx"));
 const Risks = lazy(() => import("./pages/Risks.tsx"));
 const Analytics = lazy(() => import("./pages/Analytics.tsx"));
 const Reports = lazy(() => import("./pages/Reports.tsx"));
+const Retro = lazy(() => import("./pages/Retro.tsx"));
 const SettingsPage = lazy(() => import("./pages/Settings.tsx"));
 const NotFound = lazy(() => import("./pages/NotFound.tsx"));
 
@@ -224,6 +225,16 @@ createRoot(document.getElementById("root")!).render(
                     <RequireAuth>
                       <AppLayout>
                         <Reports />
+                      </AppLayout>
+                    </RequireAuth>
+                  }
+                />
+                <Route
+                  path="/dashboard/retro"
+                  element={
+                    <RequireAuth>
+                      <AppLayout>
+                        <Retro />
                       </AppLayout>
                     </RequireAuth>
                   }

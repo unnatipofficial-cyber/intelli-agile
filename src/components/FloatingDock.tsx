@@ -9,6 +9,7 @@ import {
   IconAlertTriangle,
   IconChartBar,
   IconFileText,
+  IconMessage,
   IconSettings,
   IconMenu2,
 } from "@tabler/icons-react";
@@ -34,6 +35,7 @@ export const dockNavItems = [
   { title: "Risks", path: "/dashboard/risks", icon: "risks" },
   { title: "Analytics", path: "/dashboard/analytics", icon: "analytics" },
   { title: "Reports", path: "/dashboard/reports", icon: "reports" },
+  { title: "Retrospective", path: "/dashboard/retro", icon: "retro" },
   { title: "Settings", path: "/dashboard/settings", icon: "settings" },
 ];
 
@@ -47,6 +49,7 @@ const iconMap: Record<string, React.FC<{ className?: string }>> = {
   risks: IconAlertTriangle,
   analytics: IconChartBar,
   reports: IconFileText,
+  retro: IconMessage,
   settings: IconSettings,
 };
 

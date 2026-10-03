@@ -98,7 +98,7 @@ function PerspectivePanel({ children, className }: { children: ReactNode; classN
 /* ── Page data ─────────────────────────────────────────────────── */
 
 const stats = [
-  { to: 10, label: "Sections, toured", detail: "From dashboard to settings" },
+  { to: 11, label: "Sections, toured", detail: "From dashboard to retrospectives" },
   { to: 6, label: "Analytics views", detail: "Velocity, burndown, completion, priority, workload, risk" },
   { to: 4, label: "Sprint stages", detail: "To Do → In Progress → Review → Done" },
   { to: 3, label: "Appearance themes", detail: "Graphite, Modern Minimal, Darkmatter" },
@@ -345,7 +345,7 @@ export default function Guide() {
                     className="gap-1.5 rounded-full border-primary/30 bg-primary/10 px-3 py-1 text-[11px] font-medium text-primary"
                   >
                     <Sparkles className="h-3.5 w-3.5" />
-                    Product guide · 10 sections
+                    Product guide · 11 sections
                   </Badge>
                 </div>
 
@@ -379,7 +379,7 @@ export default function Guide() {
                 </h1>
 
                 <p className="mt-6 max-w-xl text-sm leading-relaxed text-muted-foreground sm:text-base">
-                  Ten sections, one engine. This guide walks through what each page does, what{" "}
+                  Eleven sections, one engine. This guide walks through what each page does, what
                   <span className="font-semibold text-foreground">you</span> do on it, and what AIE does for
                   you in return — with a live animated preview of every screen before you open the
                   workspace.
@@ -469,7 +469,11 @@ export default function Guide() {
         <section id="tour" className="scroll-mt-32 py-14 sm:py-16">
           <ScrollReveal delay={0} y={20}>
             <div>
-              <AppleCardsCarouselDemo cards={GUIDE_CARDS} />
+              <AppleCardsCarouselDemo
+                cards={GUIDE_CARDS}
+                kicker="The tour, in eleven cards"
+                title="Every section of AIE, as a card you can open."
+              />
             </div>
           </ScrollReveal>
         </section>
@@ -477,6 +481,7 @@ export default function Guide() {
         {/* ── Deep dives ────────────────────────────────────── */}
         {GUIDE_SECTIONS.map((section, index) => {
           const flipped = index % 2 === 1;
+          const total = GUIDE_SECTIONS.length;
           return (
             <section key={section.id} id={section.id} className="scroll-mt-32 py-14 sm:py-20">
               <div className="mx-auto max-w-6xl px-4 sm:px-6">
@@ -492,7 +497,7 @@ export default function Guide() {
                         <section.icon className="h-5 w-5 text-primary" />
                       </span>
                       <span className="font-mono text-xs font-semibold tracking-[0.2em] text-muted-foreground">
-                        {section.index} / 10
+                        {section.index} / {total}
                       </span>
                       <Badge
                         variant="outline"
