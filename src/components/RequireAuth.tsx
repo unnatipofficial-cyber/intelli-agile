@@ -2,9 +2,11 @@ import { useAuth } from "@/hooks/use-auth";
 import { Loader2 } from "lucide-react";
 import type { ReactNode } from "react";
 import { Navigate, useLocation } from "react-router";
+import { needsProfileSetup } from "@/convex/helpers";
+import { ProfileSetupDialog } from "@/components/ProfileSetupDialog";
 
 export function RequireAuth({ children }: { children: ReactNode }) {
-  const { isLoading, isAuthenticated } = useAuth();
+  const { isLoading, isAuthenticated, user } = useAuth();
   const location = useLocation();
 
   if (isLoading) {
@@ -23,6 +25,14 @@ export function RequireAuth({ children }: { children: ReactNode }) {
         replace
       />
     );
+  }
+
+  // One-time profile capture for a brand new real account. Mounted here rather
+  // than on a specific page so it is impossible to route around: whichever
+  // protected page a new sign-in lands on, the prompt appears. Once the server
+  // records profileCompletedAt this renders nothing again.
+  if (needsProfileSetup(user)) {
+    return <ProfileSetupDialog />;
   }
 
   return children;

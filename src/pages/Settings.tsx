@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useAction } from "convex/react";
 import { api } from "../convex/_generated/api";
 import { useAuth } from "@/hooks/use-auth";
+import { splitFullName, isEphemeralGuest } from "@/convex/helpers";
 import { useTheme } from "@/hooks/use-theme";
 import type { AppTheme } from "@/hooks/use-theme";
 import { motion } from "framer-motion";
@@ -9,6 +10,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Settings as SettingsIcon,
   Bell,
@@ -28,6 +30,9 @@ import {
   Mail,
   Send,
   UserCog,
+  Pencil,
+  Check,
+  X,
   Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -129,6 +134,49 @@ export default function SettingsPage() {
   const markAllRead = useMutation(api.notifications.markAllRead);
   const deleteNotif = useMutation(api.notifications.remove);
 
+  // Profile name editing. The first-login prompt already captured a name, but
+  // people change their name (and get it wrong once), so it stays editable.
+  const updateProfile = useMutation(api.users.updateProfile);
+  const [editingProfile, setEditingProfile] = useState(false);
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [profileError, setProfileError] = useState<string | null>(null);
+  const [savingProfile, setSavingProfile] = useState(false);
+
+  // A Guest's row is deleted on sign-out and `updateProfile` refuses guests, so
+  // offering the editor would be a button that can only ever fail. Hide it.
+  const canEditProfile = !isEphemeralGuest(user);
+
+  const startEditingProfile = () => {
+    const { firstName: first, lastName: last } = splitFullName(user?.name);
+    setFirstName(first);
+    setLastName(last);
+    setProfileError(null);
+    setEditingProfile(true);
+  };
+
+  const saveProfile = async () => {
+    if (!firstName.trim()) {
+      setProfileError("Please enter your first name.");
+      return;
+    }
+    setProfileError(null);
+    setSavingProfile(true);
+    try {
+      await updateProfile({
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
+      });
+      setEditingProfile(false);
+    } catch (err) {
+      setProfileError(
+        err instanceof Error ? err.message : "Could not save your profile."
+      );
+    } finally {
+      setSavingProfile(false);
+    }
+  };
+
   // Admin-only workspace management.
   const isAdmin = user?.role === "admin";
   const members = useQuery(api.team.listMembers);
@@ -171,24 +219,90 @@ export default function SettingsPage() {
 
       {/* Profile */}
       <div className="glass-card p-5">
-        <div className="flex items-center gap-2 mb-4">
-          <User className="w-4 h-4 text-primary" />
-          <h3 className="text-sm font-bold">Profile</h3>
-        </div>
-        <div className="flex items-center gap-4">
-          <div className="w-14 h-14 rounded-full bg-primary/10 flex items-center justify-center text-lg font-bold text-primary">
-            {user?.name?.charAt(0) || user?.email?.charAt(0)?.toUpperCase() || "U"}
+        <div className="flex items-center justify-between gap-2 mb-4">
+          <div className="flex items-center gap-2">
+            <User className="w-4 h-4 text-primary" />
+            <h3 className="text-sm font-bold">Profile</h3>
           </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <p className="text-sm font-semibold">{user?.name || "User"}</p>
-              <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-5 capitalize">
-                {user?.role || "user"}
-              </Badge>
+          {!editingProfile && canEditProfile && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={startEditingProfile}
+              className="h-8 text-xs"
+            >
+              <Pencil className="w-3.5 h-3.5 mr-1.5" />
+              Edit name
+            </Button>
+          )}
+        </div>
+
+        {editingProfile ? (
+          <div className="space-y-4">
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <div className="grid gap-2 flex-1">
+                <Label htmlFor="profile-first-name">First name</Label>
+                <Input
+                  id="profile-first-name"
+                  value={firstName}
+                  onChange={(e) => setFirstName(e.target.value)}
+                  placeholder="Ada"
+                  autoComplete="given-name"
+                  autoFocus
+                />
+              </div>
+              <div className="grid gap-2 flex-1">
+                <Label htmlFor="profile-last-name">Last name</Label>
+                <Input
+                  id="profile-last-name"
+                  value={lastName}
+                  onChange={(e) => setLastName(e.target.value)}
+                  placeholder="Lovelace"
+                  autoComplete="family-name"
+                />
+              </div>
             </div>
-            <p className="text-xs text-muted-foreground">{user?.email || ""}</p>
+            {profileError && (
+              <p role="alert" className="text-sm text-destructive">
+                {profileError}
+              </p>
+            )}
+            <div className="flex items-center gap-2">
+              <Button size="sm" onClick={saveProfile} disabled={savingProfile}>
+                {savingProfile ? (
+                  <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                ) : (
+                  <Check className="w-3.5 h-3.5 mr-1.5" />
+                )}
+                Save
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setEditingProfile(false)}
+                disabled={savingProfile}
+              >
+                <X className="w-3.5 h-3.5 mr-1.5" />
+                Cancel
+              </Button>
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="flex items-center gap-4">
+            <div className="w-14 h-14 rounded-full bg-primary/10 flex items-center justify-center text-lg font-bold text-primary">
+              {user?.name?.charAt(0) || user?.email?.charAt(0)?.toUpperCase() || "U"}
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <p className="text-sm font-semibold">{user?.name || "User"}</p>
+                <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-5 capitalize">
+                  {user?.role || "user"}
+                </Badge>
+              </div>
+              <p className="text-xs text-muted-foreground">{user?.email || ""}</p>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* ── Theme selector ───────────────────────────────────── */}

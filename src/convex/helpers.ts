@@ -1,5 +1,9 @@
-import { GenericQueryCtx } from "convex/server";
-import { DataModel } from "./_generated/dataModel";
+// Type-only imports. This module is also imported directly by React components
+// (the first-login prompt and RequireAuth), so `convex/server` must never end up
+// in the browser bundle. `import type` makes that elision a guarantee for both
+// tsc and the bundler rather than something that depends on emit settings.
+import type { GenericQueryCtx } from "convex/server";
+import type { DataModel } from "./_generated/dataModel";
 
 /**
  * True for a "Guest" session — someone who signed in through the Anonymous
@@ -15,6 +19,53 @@ export function isEphemeralGuest(
   user: { isAnonymous?: unknown } | null | undefined,
 ): boolean {
   return user?.isAnonymous === true;
+}
+
+/**
+ * Split a stored profile name into the two fields the onboarding form edits.
+ *
+ * Everything after the first token counts as the last name, so "Ada Byron King"
+ * comes back as first "Ada" / last "Byron King" rather than losing the middle.
+ */
+export function splitFullName(
+  name?: string | null,
+): { firstName: string; lastName: string } {
+  const parts = (name ?? "").trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return { firstName: "", lastName: "" };
+  if (parts.length === 1) return { firstName: parts[0], lastName: "" };
+  return { firstName: parts[0], lastName: parts.slice(1).join(" ") };
+}
+
+/**
+ * Join the onboarding form's two fields back into the single `name` the schema
+ * stores. Interior whitespace is collapsed and each half trimmed, so a stray
+ * space or a double space never gets persisted.
+ */
+export function buildFullName(firstName: string, lastName?: string | null): string {
+  return [firstName, lastName]
+    .map((part) => (part ?? "").trim().replace(/\s+/g, " "))
+    .filter(Boolean)
+    .join(" ");
+}
+
+/**
+ * True when a real (non-Guest) account has never been through the name prompt.
+ *
+ * `profileCompletedAt` is the authoritative "asked and answered" flag, so the
+ * prompt shows exactly once per account and never again on later sign-ins.
+ *
+ * Guests are excluded on purpose: their row is deleted on sign-out, so a prompt
+ * for them would be both unskippable and pointless.
+ */
+export function needsProfileSetup(
+  user:
+    | { profileCompletedAt?: unknown; isAnonymous?: unknown }
+    | null
+    | undefined,
+): boolean {
+  if (!user) return false;
+  if (isEphemeralGuest(user)) return false;
+  return user.profileCompletedAt == null;
 }
 
 /**

@@ -28,6 +28,12 @@ const schema = defineSchema(
       role: v.optional(roleValidator),
       jobTitle: v.optional(v.string()),
       department: v.optional(v.string()),
+      /**
+       * When this account last went through the first-login name prompt.
+       * Undefined means "never asked", which is what makes the prompt appear
+       * exactly once per account rather than on every sign-in.
+       */
+      profileCompletedAt: v.optional(v.number()),
       createdAt: v.number(),
       updatedAt: v.number(),
     })

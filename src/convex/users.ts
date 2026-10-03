@@ -3,7 +3,7 @@ import { query, mutation, QueryCtx } from "./_generated/server";
 import { v } from "convex/values";
 import { requireRole, ROLES } from "./rbac";
 import { roleValidator } from "./schema";
-import { isEphemeralGuest } from "./helpers";
+import { isEphemeralGuest, buildFullName } from "./helpers";
 
 export const currentUser = query({
   args: {},
@@ -85,6 +85,40 @@ export const endGuestSession = mutation({
     await ctx.db.delete(userId);
 
     return { purged: true, reason: "guest" as const };
+  },
+});
+
+/**
+ * Save the profile name.
+ *
+ * Serves both callers: the first-login prompt (which also stamps
+ * `profileCompletedAt`, telling the prompt it has done its job) and the
+ * Settings editor (which must not re-stamp, so the original onboarding date is
+ * preserved on later edits).
+ */
+export const updateProfile = mutation({
+  args: { firstName: v.string(), lastName: v.optional(v.string()) },
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) throw new Error("You must be signed in to update your profile.");
+    const user = await ctx.db.get(userId);
+    if (!user) throw new Error("Your profile could not be found.");
+    if (isEphemeralGuest(user)) {
+      throw new Error("Guest sessions can't save a profile.");
+    }
+
+    const firstName = args.firstName.trim().replace(/\s+/g, " ");
+    if (!firstName) throw new Error("Please enter your first name.");
+
+    const name = buildFullName(firstName, args.lastName);
+    const now = Date.now();
+    await ctx.db.patch(userId, {
+      name,
+      // `??` keeps the original onboarding timestamp when Settings edits later.
+      profileCompletedAt: user.profileCompletedAt ?? now,
+      updatedAt: now,
+    });
+    return { ok: true, name };
   },
 });
 
