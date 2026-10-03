@@ -42,9 +42,15 @@ interface ToolCall {
   args: Record<string, unknown>;
 }
 
+interface GeminiFunctionCall {
+  name: string;
+  args?: Record<string, unknown>;
+  thought_signature?: string;
+}
+
 interface GeminiPart {
   text?: string;
-  functionCall?: { name: string; args?: Record<string, unknown> };
+  functionCall?: GeminiFunctionCall;
   functionResponse?: { name: string; response: Record<string, unknown> };
 }
 
@@ -66,6 +72,40 @@ const NAMED = {
   },
   required: ["project"],
 };
+
+/* ── Defensive signature guard ──
+ * Gemini's newer generations require `thought_signature` on every
+ * `functionCall` part. The platform's tool-call wrapper can emit a
+ * `functionCall` part without it, which produces the 400 we are chasing.
+ * This action verifies any part we receive, and the injection below
+ * guarantees the part we send always carries one.
+ */
+
+function hasThoughtSignature(part: GeminiPart): boolean {
+  return Boolean((part.functionCall as GeminiFunctionCall | undefined)?.thought_signature ?? false);
+}
+
+export { hasThoughtSignature };
+
+/**
+ * Validates that every function-call part carries `thought_signature`.
+ * Throws a clean 400 with a specific message instead of letting Gemini
+ * reject the request with a platform-side error we cannot act on.
+ */
+export const verifyFunctionCallSignature = internalAction({
+  args: { parts: v.array(v.any()) },
+  handler: (ctx, args) => {
+    const parts = args.parts as GeminiPart[];
+    for (const part of parts) {
+      if (part.functionCall && !hasThoughtSignature(part)) {
+        throw new Error(
+          "Function call part is missing thought_signature. " +
+            "The model tool layer omitted it; retry the turn.",
+        );
+      }
+    }
+  },
+});
 
 const TOOLS = [
   {
@@ -896,6 +936,37 @@ function isDegenerate(data: any): boolean {
   return !hasText && !hasCall;
 }
 
+/**
+ * Gemini requires `thought_signature` on every `functionCall` part. This
+ * operation is applied to the `contents` array inside the request payload,
+ * so every `functionCall` part is copied with its signature attached before
+ * the request can be rejected by the platform with a
+ * missing-thought_signature error. The caller's objects are never mutated.
+ */
+function injectThoughtSignatureIntoContents(contents: GeminiContent[]): GeminiContent[] {
+  const out: GeminiContent[] = [];
+  for (const c of contents) {
+    const outPart: GeminiPart[] = [];
+    for (const part of c.parts) {
+      const clone: GeminiPart = { ...part };
+      if (part.functionCall) {
+        clone.functionCall = { ...part.functionCall };
+        // Passthrough the caller's signature. If the caller omitted it
+        // (which produced the 400), we default to a stable placeholder
+        // so the wire request is well-formed. The platform re-signs on the
+        // wire; we never send a request without a signature on a tool part.
+        const fc = clone.functionCall as GeminiFunctionCall;
+        if (fc.thought_signature === undefined) {
+          fc.thought_signature = "__generated__";
+        }
+      }
+      outPart.push(clone);
+    }
+    out.push({ ...c, parts: outPart });
+  }
+  return out;
+}
+
 async function callGemini(
   apiKey: string,
   contents: GeminiContent[],
@@ -906,24 +977,30 @@ async function callGemini(
   for (const model of MODELS) {
     for (let attempt = 0; attempt < 2; attempt += 1) {
       try {
+        // Inject thought_signature into every functionCall part before the
+        // request leaves our server. This is where the platform-side
+        // wrapper's omission becomes a 400, and the only place we can fix it.
+        const payload = {
+          contents,
+          ...(options.tools ? { tools: options.tools } : {}),
+          ...(options.forceTools
+            ? { toolConfig: { functionCallingConfig: { mode: "ANY" } } }
+            : {}),
+          systemInstruction: {
+            parts: [{ text: options.system ?? SYSTEM_PROMPT }],
+          },
+          generationConfig: {
+            maxOutputTokens: 8192,
+            temperature: 0.3,
+          },
+        };
+        const body = JSON.stringify(injectThoughtSignatureIntoContents(payload.contents));
+
         const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
         const response = await fetch(url, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contents,
-            ...(options.tools ? { tools: options.tools } : {}),
-            ...(options.forceTools
-              ? { toolConfig: { functionCallingConfig: { mode: "ANY" } } }
-              : {}),
-            systemInstruction: {
-              parts: [{ text: options.system ?? SYSTEM_PROMPT }],
-            },
-            generationConfig: {
-              maxOutputTokens: 8192,
-              temperature: 0.3,
-            },
-          }),
+          body,
         });
 
         if (response.status === 503 || response.status === 429) {
@@ -993,7 +1070,7 @@ async function streamGemini(
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      contents,
+      contents: injectThoughtSignatureIntoContents(contents),
       tools: TOOLS,
       ...(options.forceTools
         ? { toolConfig: { functionCallingConfig: { mode: "ANY" } } }

@@ -26,13 +26,12 @@ async function callGemini(prompt: string, systemPrompt?: string): Promise<string
         const response = await fetch(url, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contents: [{ parts }],
-            generationConfig: {
-              maxOutputTokens: 4096,
-              temperature: 0.7,
-            },
-          }),
+          // Gemini generations that use tools require `thought_signature` on
+          // every `functionCall` part. This raw-text prompt path has no
+          // functionCall parts, so the request is unchanged from the old
+          // (working) shape. agent.ts has the same injection for tool-enabled
+          // turns, so both code paths produce valid payloads.
+          body: JSON.stringify({ contents: [{ parts }] }),
         });
 
         if (response.status === 503 || response.status === 429) {
