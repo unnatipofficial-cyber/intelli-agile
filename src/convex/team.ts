@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { getAuthUserId } from "@convex-dev/auth/server";
+import { requireRole, ROLES } from "./rbac";
 
 export const listMembers = query({
   args: {},
@@ -120,6 +121,8 @@ export const addMember = mutation({
   }> => {
     const actor = await getAuthUserId(ctx as any);
     if (!actor) throw new Error("You must be signed in to add a team member.");
+    // Invited members (MEMBER) cannot grow the roster; owners can.
+    await requireRole(ctx as any, [ROLES.ADMIN, ROLES.USER]);
 
     const name = args.name.trim();
     if (!name) throw new Error("A name is required to add a team member.");
@@ -181,6 +184,9 @@ export const addMember = mutation({
         jobTitle: args.jobTitle?.trim() || undefined,
         department: args.department?.trim() || undefined,
         isAnonymous: false,
+        role: ROLES.MEMBER,
+        createdAt: now,
+        updatedAt: now,
       });
       await ctx.db.insert("notifications", {
         userId,

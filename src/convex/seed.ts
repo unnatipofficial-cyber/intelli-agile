@@ -1,5 +1,6 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { mutation } from "./_generated/server";
+import { ROLES } from "./rbac";
 
 export const getOrCreateSampleData = mutation({
   args: {},
@@ -7,19 +8,26 @@ export const getOrCreateSampleData = mutation({
     const userId = await getAuthUserId(ctx);
     if (!userId) throw new Error("Not authenticated");
 
-    // Ensure a user record exists for the current user (anonymous guests may not have one)
+    const now = Date.now();
+
+    // Ensure a user record exists for the current user (anonymous guests may not have one),
+    // and make whoever seeds the workspace its owner.
     const existingUser = await ctx.db.get(userId);
     if (!existingUser) {
       await ctx.db.insert("users", {
         name: "Guest User",
         isAnonymous: true,
+        role: ROLES.ADMIN,
+        createdAt: now,
+        updatedAt: now,
       });
+    } else if (existingUser.role !== ROLES.ADMIN) {
+      await ctx.db.patch(userId, { role: ROLES.ADMIN, updatedAt: now });
     }
 
     const existingProjects = await ctx.db.query("projects").collect();
     if (existingProjects.length > 0) return { seeded: false, message: "Data already exists" };
 
-    const now = Date.now();
     const day = 86400000;
 
     // Create team member users
@@ -48,6 +56,9 @@ export const getOrCreateSampleData = mutation({
           email: tm.email,
           jobTitle: tm.jobTitle,
           department: tm.department,
+          role: ROLES.MEMBER,
+          createdAt: now,
+          updatedAt: now,
         });
         teamUserIds.push(id);
       }

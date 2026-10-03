@@ -16,9 +16,12 @@ import {
 
 import { useAuth } from "@/hooks/use-auth";
 import { useDarkSurface } from "@/hooks/use-theme";
+import { api } from "@/convex/_generated/api";
+import { useMutation, useQuery } from "convex/react";
+import { toast } from "sonner";
 import logo from "@/assets/logo.svg";
-import { ArrowRight, Loader2, Mail, UserX } from "lucide-react";
-import { Suspense, useEffect, useState } from "react";
+import { ArrowRight, CheckCircle2, Loader2, Mail, Ticket, UserX } from "lucide-react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 
 interface AuthProps {
@@ -52,14 +55,45 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
   );
   const [step, setStep] = useState<"signIn" | { email: string }>("signIn");
   const [otp, setOtp] = useState("");
+  const [email, setEmail] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // A short invite link (`/auth?invite=<token>`) turns this page into a
+  // passwordless acceptance screen: the address is pre-filled from the invite,
+  // and signing in redeems it.
+  const inviteToken = searchParams.get("invite") ?? searchParams.get("inviteToken");
+  const invite = useQuery(
+    api.invitations.preview,
+    inviteToken ? { token: inviteToken } : "skip",
+  );
+  const acceptInvite = useMutation(api.invitations.accept);
+  const acceptedRef = useRef(false);
+
   useEffect(() => {
-    if (!authLoading && isAuthenticated) {
-      navigate(redirect);
-    }
-  }, [authLoading, isAuthenticated, navigate, redirect]);
+    const invited = (invite as { email?: string } | undefined)?.email;
+    if (invited) setEmail(invited);
+  }, [invite]);
+
+  useEffect(() => {
+    if (authLoading || !isAuthenticated) return;
+    let cancelled = false;
+    (async () => {
+      if (inviteToken && !acceptedRef.current) {
+        acceptedRef.current = true;
+        try {
+          const result = await acceptInvite({ token: inviteToken });
+          toast.success(`Invitation accepted — you joined as ${result.role}.`);
+        } catch (err) {
+          console.error("Invitation acceptance failed:", err);
+        }
+      }
+      if (!cancelled) navigate(redirect);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [authLoading, isAuthenticated, navigate, redirect, inviteToken, acceptInvite]);
   const handleEmailSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setIsLoading(true);
@@ -142,6 +176,33 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
               </CardHeader>
               <form onSubmit={handleEmailSubmit}>
                 <CardContent>
+                  {inviteToken && (
+                    <div
+                      className={
+                        "mb-4 flex items-start gap-2 rounded-lg border px-3 py-2 text-xs " +
+                        ((invite as { valid?: boolean } | undefined)?.valid
+                          ? "border-emerald-500/30 bg-emerald-500/5 text-emerald-700 dark:text-emerald-400"
+                          : "border-destructive/30 bg-destructive/5 text-destructive")
+                      }
+                    >
+                      {(invite as { valid?: boolean } | undefined)?.valid ? (
+                        <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                      ) : (
+                        <Ticket className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                      )}
+                      <span>
+                        {(invite as { valid?: boolean } | undefined)?.valid
+                          ? `You've been invited to AIE${
+                              (invite as { role?: string } | undefined)?.role
+                                ? ` as ${(invite as { role?: string }).role}`
+                                : ""
+                            }. Sign in below to accept.`
+                          : invite === undefined
+                            ? "Checking your invitation…"
+                            : "This invitation link is invalid, expired, or already used. You can still sign in normally."}
+                      </span>
+                    </div>
+                  )}
                   
                   <div className="relative flex items-center gap-2">
                     <div className="relative flex-1">
@@ -152,6 +213,8 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
                         type="email"
                         className="pl-9"
                         disabled={isLoading}
+                        value={email}
+                        onChange={(event) => setEmail(event.target.value)}
                         required
                       />
                     </div>

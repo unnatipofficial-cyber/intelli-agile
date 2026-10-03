@@ -1,12 +1,14 @@
-import { useQuery, useMutation } from "convex/react";
+import { useQuery, useMutation, useAction } from "convex/react";
 import { api } from "../convex/_generated/api";
 import { useAuth } from "@/hooks/use-auth";
 import { useTheme } from "@/hooks/use-theme";
 import type { AppTheme } from "@/hooks/use-theme";
 import { motion } from "framer-motion";
+import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import {
   Settings as SettingsIcon,
   Bell,
@@ -23,6 +25,10 @@ import {
   Users,
   Palette,
   Zap,
+  Mail,
+  Send,
+  UserCog,
+  Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useNavigate } from "react-router";
@@ -123,6 +129,36 @@ export default function SettingsPage() {
   const markAllRead = useMutation(api.notifications.markAllRead);
   const deleteNotif = useMutation(api.notifications.remove);
 
+  // Admin-only workspace management.
+  const isAdmin = user?.role === "admin";
+  const members = useQuery(api.team.listMembers);
+  const invitations = useQuery(api.invitations.list);
+  const setUserRole = useMutation(api.users.setRole);
+  const revokeInvite = useMutation(api.invitations.revoke);
+  const sendInvite = useAction(api.invitations.send);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteRole, setInviteRole] = useState<"admin" | "user" | "member">("member");
+  const [sending, setSending] = useState(false);
+
+  const handleSendInvite = async () => {
+    const email = inviteEmail.trim();
+    if (!email) return;
+    setSending(true);
+    try {
+      const result = await sendInvite({ email, role: inviteRole });
+      toast.success(
+        result.emailed
+          ? `Invitation emailed to ${result.email}`
+          : `Invitation created for ${result.email}, but the email could not be sent.`
+      );
+      setInviteEmail("");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not send the invitation");
+    } finally {
+      setSending(false);
+    }
+  };
+
   const unreadNotifications = notifications?.filter((n) => !n.isRead) || [];
   const readNotifications = notifications?.filter((n) => n.isRead) || [];
 
@@ -144,7 +180,12 @@ export default function SettingsPage() {
             {user?.name?.charAt(0) || user?.email?.charAt(0)?.toUpperCase() || "U"}
           </div>
           <div>
-            <p className="text-sm font-semibold">{user?.name || "User"}</p>
+            <div className="flex items-center gap-2">
+              <p className="text-sm font-semibold">{user?.name || "User"}</p>
+              <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-5 capitalize">
+                {user?.role || "user"}
+              </Badge>
+            </div>
             <p className="text-xs text-muted-foreground">{user?.email || ""}</p>
           </div>
         </div>
@@ -324,6 +365,120 @@ export default function SettingsPage() {
           <p className="text-sm text-muted-foreground text-center py-6">No notifications yet</p>
         )}
       </div>
+
+      {/* ── Admin-only workspace management ───────────────────── */}
+      {isAdmin && (
+        <>
+          {/* Team & roles */}
+          <div className="glass-card p-5">
+            <div className="flex items-center gap-2 mb-1">
+              <UserCog className="w-4 h-4 text-primary" />
+              <h3 className="text-sm font-bold">Team & Roles</h3>
+            </div>
+            <p className="text-xs text-muted-foreground mb-4">
+              Admins manage everything. Users can delete and bulk-edit work. Members can contribute but not destroy.
+            </p>
+            <div className="space-y-1.5">
+              {(members ?? []).map((member) => (
+                <div key={member._id} className="flex items-center gap-3 p-2 rounded-lg hover:bg-accent/40">
+                  <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-primary shrink-0">
+                    {(member.name || member.email || "U").charAt(0).toUpperCase()}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">{member.name || "Unnamed"}</p>
+                    <p className="text-xs text-muted-foreground truncate">{member.email || ""}</p>
+                  </div>
+                  <select
+                    value={member.role ?? "user"}
+                    onChange={(event) =>
+                      setUserRole({ userId: member._id, role: event.target.value as "admin" | "user" | "member" })
+                    }
+                    className="text-xs rounded-md border border-border bg-background px-2 py-1 capitalize"
+                    aria-label={`Role for ${member.name || member.email || "member"}`}
+                  >
+                    <option value="admin">Admin</option>
+                    <option value="user">User</option>
+                    <option value="member">Member</option>
+                  </select>
+                </div>
+              ))}
+              {members && members.length === 0 && (
+                <p className="text-sm text-muted-foreground text-center py-4">No team members yet</p>
+              )}
+            </div>
+          </div>
+
+          {/* Invitations */}
+          <div className="glass-card p-5">
+            <div className="flex items-center gap-2 mb-1">
+              <Mail className="w-4 h-4 text-primary" />
+              <h3 className="text-sm font-bold">Invitations</h3>
+            </div>
+            <p className="text-xs text-muted-foreground mb-4">
+              Invite someone by email. They sign in with a one-time code — no password.
+            </p>
+            <div className="flex flex-col sm:flex-row gap-2 mb-4">
+              <Input
+                value={inviteEmail}
+                onChange={(event) => setInviteEmail(event.target.value)}
+                placeholder="name@example.com"
+                type="email"
+                className="flex-1"
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") handleSendInvite();
+                }}
+              />
+              <select
+                value={inviteRole}
+                onChange={(event) => setInviteRole(event.target.value as "admin" | "user" | "member")}
+                className="text-xs rounded-md border border-border bg-background px-2 py-2 capitalize"
+                aria-label="Invitation role"
+              >
+                <option value="member">Member</option>
+                <option value="user">User</option>
+                <option value="admin">Admin</option>
+              </select>
+              <Button
+                onClick={handleSendInvite}
+                disabled={sending || !inviteEmail.trim()}
+                className="gap-2"
+              >
+                {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                Invite
+              </Button>
+            </div>
+
+            {(invitations ?? []).length > 0 && (
+              <div className="space-y-2">
+                {(invitations ?? []).map((invite) => (
+                  <div key={invite._id} className="flex items-center gap-3 p-2 rounded-lg border border-border/50">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm truncate">{invite.email}</p>
+                      <p className="text-[10px] text-muted-foreground capitalize">
+                        {invite.role}
+                        {invite.used
+                          ? " · accepted"
+                          : invite.expired
+                            ? " · expired"
+                            : ` · expires ${new Date(invite.expiresAt).toLocaleDateString()}`}
+                      </p>
+                    </div>
+                    {!invite.used && (
+                      <button
+                        onClick={() => revokeInvite({ invitationId: invite._id })}
+                        className="p-1 rounded hover:bg-accent/50 text-destructive"
+                        title="Revoke invitation"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </>
+      )}
 
       {/* Account */}
       <div className="glass-card p-5">

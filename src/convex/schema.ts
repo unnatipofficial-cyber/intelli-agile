@@ -260,6 +260,30 @@ const schema = defineSchema(
     })
       .index("by_user", ["userId"])
       .index("by_due", ["nextRunAt"]),
+
+    /**
+     * Live progress events emitted while the AIE Agent is thinking and acting.
+     * The chat panel subscribes to a run's events so the user watches tools run
+     * and the answer form in real time, instead of a spinner over a black box.
+     * Rows are append-only and keyed by a per-turn `runId`.
+     */
+    agentEvents: defineTable({
+      runId: v.string(),
+      userId: v.optional(v.id("users")),
+      seq: v.number(),
+      type: v.union(
+        v.literal("status"),
+        v.literal("token"),
+        v.literal("tool"),
+        v.literal("done"),
+        v.literal("error")
+      ),
+      text: v.optional(v.string()),
+      tool: v.optional(v.string()),
+      label: v.optional(v.string()),
+      ok: v.optional(v.boolean()),
+      createdAt: v.number(),
+    }).index("by_run", ["runId", "seq"]),
   },
   {
     schemaValidation: false,

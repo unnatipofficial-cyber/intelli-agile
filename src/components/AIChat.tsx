@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { useAction } from "convex/react";
+import { useAction, useQuery } from "convex/react";
 import { useNavigate } from "react-router";
 import { api } from "../convex/_generated/api";
 import { motion, AnimatePresence } from "framer-motion";
@@ -72,9 +72,23 @@ export default function AIChat() {
   const inputRef = useRef<HTMLInputElement>(null);
 
   const [thinkingIndex, setThinkingIndex] = useState(0);
+  // The id of the in-flight run; progress events are tagged with it and the
+  // agent writes them as it works, so the panel can stream the answer and show
+  // each tool as it runs instead of a blanket spinner.
+  const [runId, setRunId] = useState<string | null>(null);
   const chatAction = useAction(api.agent.chat);
+  const liveEvents = useQuery(
+    api.agentStream.events,
+    runId ? { runId } : "skip"
+  );
   const navigate = useNavigate();
   const { theme, setAppTheme, toggleTheme } = useTheme();
+
+  const liveToolEvents = (liveEvents ?? []).filter((e) => e.type === "tool");
+  const liveText = (liveEvents ?? [])
+    .filter((e) => e.type === "token")
+    .map((e) => e.text ?? "")
+    .join("");
 
   /** Applies the browser-side half of a reply: theme switches and navigation. */
   const applyClientActions = (incoming: ClientAction[]) => {
@@ -123,6 +137,12 @@ export default function AIChat() {
     setInput("");
     setIsLoading(true);
 
+    const nextRunId =
+      typeof crypto !== "undefined" && "randomUUID" in crypto
+        ? crypto.randomUUID()
+        : `run-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    setRunId(nextRunId);
+
     try {
       // History is trimmed to the last 12 turns: enough continuity for the
       // agent to resolve "that project", without ballooning the prompt.
@@ -131,6 +151,7 @@ export default function AIChat() {
           role: m.role,
           content: m.content,
         })),
+        runId: nextRunId,
       });
 
       setMessages([
@@ -153,6 +174,7 @@ export default function AIChat() {
         },
       ]);
     }
+    setRunId(null);
     setIsLoading(false);
   };
 
@@ -315,11 +337,40 @@ export default function AIChat() {
                   <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
                     <Bot className="w-3 h-3 text-primary" />
                   </div>
-                  <div className="bg-muted/60 rounded-xl rounded-bl-sm px-3 py-2">
-                    <span className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      {THINKING_LINES[thinkingIndex]}
-                    </span>
+                  <div className="max-w-[85%] bg-muted/60 rounded-xl rounded-bl-sm px-3 py-2 space-y-2">
+                    {liveToolEvents.length > 0 && (
+                      <div className="space-y-1">
+                        {liveToolEvents.map((event, k) => (
+                          <p
+                            key={k}
+                            className={cn(
+                              "flex items-start gap-1.5 text-[11px]",
+                              event.ok === false
+                                ? "text-amber-600 dark:text-amber-400"
+                                : "text-muted-foreground"
+                            )}
+                          >
+                            {event.ok === false ? (
+                              <AlertCircle className="w-3 h-3 mt-0.5 shrink-0" />
+                            ) : (
+                              <CheckCircle2 className="w-3 h-3 mt-0.5 shrink-0 text-emerald-500" />
+                            )}
+                            {event.label}
+                          </p>
+                        ))}
+                      </div>
+                    )}
+                    {liveText ? (
+                      <p className="text-sm leading-relaxed whitespace-pre-wrap">
+                        {liveText}
+                        <span className="ml-0.5 inline-block h-3.5 w-1.5 align-middle bg-foreground/60 animate-pulse" />
+                      </p>
+                    ) : (
+                      <span className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        {liveToolEvents.length > 0 ? "Working…" : THINKING_LINES[thinkingIndex]}
+                      </span>
+                    )}
                   </div>
                 </div>
               )}

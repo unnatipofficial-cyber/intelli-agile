@@ -975,6 +975,84 @@ async function requestParts(
 }
 
 /**
+ * Best-effort token stream of one model turn. Uses Gemini's SSE endpoint and
+ * reports text deltas as they arrive, while still collecting any function
+ * calls the turn contains. Callers fall back to `requestParts` on any error,
+ * so streaming can never cost the agent an answer.
+ */
+async function streamGemini(
+  apiKey: string,
+  contents: GeminiContent[],
+  system: string,
+  options: { forceTools?: boolean },
+  onText: (delta: string) => void
+): Promise<GeminiPart[]> {
+  const model = MODELS[0];
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse&key=${apiKey}`;
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      contents,
+      tools: TOOLS,
+      ...(options.forceTools
+        ? { toolConfig: { functionCallingConfig: { mode: "ANY" } } }
+        : {}),
+      systemInstruction: { parts: [{ text: system }] },
+      generationConfig: { maxOutputTokens: 8192, temperature: 0.3 },
+    }),
+  });
+  if (!response.ok || !response.body) {
+    throw new Error(`Gemini stream error: HTTP ${response.status}`);
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  const calls: ToolCall[] = [];
+  let buffer = "";
+  let text = "";
+
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop() ?? "";
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed.startsWith("data:")) continue;
+      const payload = trimmed.slice(5).trim();
+      if (!payload || payload === "[DONE]") continue;
+      let chunk: any;
+      try {
+        chunk = JSON.parse(payload);
+      } catch {
+        continue;
+      }
+      const parts = (chunk?.candidates?.[0]?.content?.parts ?? []) as GeminiPart[];
+      for (const part of parts) {
+        if (typeof part.text === "string" && part.text) {
+          text += part.text;
+          onText(part.text);
+        } else if (part.functionCall?.name) {
+          calls.push({
+            name: part.functionCall.name,
+            args: part.functionCall.args ?? {},
+          });
+        }
+      }
+    }
+  }
+
+  const parts: GeminiPart[] = calls.map((call) => ({
+    functionCall: { name: call.name, args: call.args },
+  }));
+  if (text.trim()) parts.push({ text });
+  if (!parts.length) throw new Error("Gemini stream produced no usable parts.");
+  return parts;
+}
+
+/**
  * Recognises a model that narrated an action instead of taking it — "Done.",
  * "Added.", "Sure, created." — with no tool actually run. This is the failure
  * we used to show the user verbatim.
@@ -1101,10 +1179,25 @@ export const agentLoop = internalAction({
         content: v.string(),
       })
     ),
+    /** When set, the turn emits live progress events under this id. */
+    runId: v.optional(v.string()),
   },
   handler: async (ctx, args): Promise<AgentReply> => {
+    const runId = args.runId;
+    let seq = 0;
+    /** Append a progress event; never let a failed emit break the turn. */
+    const emit = (event: Record<string, unknown>) => {
+      if (!runId) return;
+      seq += 1;
+      void ctx
+        .runMutation(internal.agentStream.emit, { runId, seq, ...event } as any)
+        .catch((err: unknown) => console.error("agent event emit failed:", err));
+    };
+    if (runId) emit({ type: "status", text: "Reading the workspace…" });
+
     const apiKey = process.env.GOOGLE_AI_API_KEY;
     if (!apiKey) {
+      emit({ type: "error", text: "GOOGLE_AI_API_KEY is not configured." });
       return {
         reply:
           "GOOGLE_AI_API_KEY is not configured. Add it in Convex Settings → Environment Variables, then try again.",
@@ -1140,9 +1233,33 @@ export const agentLoop = internalAction({
 
     for (let step = 0; step < MAX_STEPS; step += 1) {
       let parts: GeminiPart[];
+      // Buffer streamed answer text and flush it in readable batches, so the
+      // client renders words as they are produced instead of one dump at the end.
+      let pending = "";
+      const flush = (force = false) => {
+        if (pending && (force || pending.length >= 24)) {
+          const text = pending;
+          pending = "";
+          emit({ type: "token", text });
+        }
+      };
       try {
-        parts = await requestParts(apiKey, contents, liveSystem);
+        if (runId) {
+          try {
+            parts = await streamGemini(apiKey, contents, liveSystem, {}, (delta) => {
+              pending += delta;
+              flush();
+            });
+            flush(true);
+          } catch (streamErr) {
+            console.error("Streaming failed, falling back to buffered call:", streamErr);
+            parts = await requestParts(apiKey, contents, liveSystem);
+          }
+        } else {
+          parts = await requestParts(apiKey, contents, liveSystem);
+        }
       } catch (err: any) {
+        emit({ type: "error", text: String(err?.message ?? err).slice(0, 300) });
         return {
           reply:
             summaries.length > 0
@@ -1195,6 +1312,7 @@ export const agentLoop = internalAction({
       }
 
       if (calls.length === 0) {
+        emit({ type: "done" });
         return {
           reply:
             text.trim() ||
@@ -1239,6 +1357,7 @@ export const agentLoop = internalAction({
           response = { error: String(err?.message ?? err).slice(0, 300) };
         }
         const trace = describeAction(call.name, call.args, response);
+        emit({ type: "tool", tool: call.name, label: trace.label, ok: trace.ok });
         if (!READ_ONLY_TOOLS.has(call.name)) {
           actions.push(trace);
           if (trace.ok) summaries.push(trace.label);
@@ -1250,6 +1369,7 @@ export const agentLoop = internalAction({
       contents.push({ role: "user", parts: responseParts });
     }
 
+    emit({ type: "done" });
     return {
       reply:
         summaries.length > 0
@@ -2038,12 +2158,15 @@ export const chat = action({
         content: v.string(),
       })
     ),
+    /** Optional id the client subscribes to for live progress events. */
+    runId: v.optional(v.string()),
   },
   handler: async (ctx, args): Promise<AgentReply> => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new Error("Not authenticated");
     return await ctx.runAction(internal.agent.agentLoop, {
       messages: args.messages,
+      runId: args.runId,
     });
   },
 });

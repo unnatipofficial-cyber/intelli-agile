@@ -136,6 +136,15 @@ const GROUP_PATTERNS: { pattern: RegExp; kind: string }[] = [
   { pattern: /\b(overloaded|over capacity|too much work|at capacity)\b/, kind: "overloaded" },
 ];
 
+/**
+ * Which collective category a people-request names, or null when it names a
+ * specific person. Pure, so the classification can be tested without a db.
+ */
+export function matchGroupKind(input: string): string | null {
+  const normalized = normalizeText(input);
+  return GROUP_PATTERNS.find((g) => g.pattern.test(normalized))?.kind ?? null;
+}
+
 async function resolveUserGroup(
   ctx: DbCtx,
   input: string,
@@ -145,7 +154,8 @@ async function resolveUserGroup(
   const label = (u: any) => u.name ?? u.email ?? "Unknown";
   const normalized = normalizeText(input);
 
-  const group = GROUP_PATTERNS.find((g) => g.pattern.test(normalized));
+  const kind = matchGroupKind(input);
+  const group = kind ? { kind } : undefined;
   if (group) {
     const tasks = (await ctx.db.query("tasks").collect()) as any[];
     const openPoints = (u: any) =>
@@ -1447,6 +1457,7 @@ export const deleteProject = internalMutation({
   },
   handler: async (ctx, args) => {
     const actor = await requireActor(ctx);
+    await requireRole(ctx as any, ROLES.ADMIN);
     const resolved = await resolveProject(ctx, args.project);
     if (!resolved.ok) return { error: resolved.error };
     const project = await getDoc(ctx,resolved.id);
@@ -1553,6 +1564,7 @@ export const removeMember = internalMutation({
     if (!project.ok) return { error: project.error };
     const member = await resolveUser(ctx, args.user);
     if (!member.ok) return { error: member.error };
+    await requireRole(ctx as any, ROLES.ADMIN);
     const record = await ctx.db
       .query("projectMembers")
       .withIndex("by_project_user", (q: any) =>
@@ -1852,6 +1864,7 @@ export const deleteTask = internalMutation({
   },
   handler: async (ctx, args) => {
     const actor = await requireActor(ctx);
+    await requireRole(ctx as any, [ROLES.ADMIN, ROLES.USER]);
     let projectId: any;
     if (args.project) {
       const p = await resolveProject(ctx, args.project);
@@ -2267,6 +2280,7 @@ export const deleteRisk = internalMutation({
   },
   handler: async (ctx, args) => {
     const actor = await requireActor(ctx);
+    await requireRole(ctx as any, [ROLES.ADMIN, ROLES.USER]);
     let projectId: any;
     if (args.project) {
       const p = await resolveProject(ctx, args.project);
@@ -2908,6 +2922,9 @@ export const addTeamMember = internalMutation({
         email,
         jobTitle: args.jobTitle?.trim(),
         department: args.department?.trim(),
+        role: ROLES.MEMBER,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
       });
       await ctx.db.insert("notifications", {
         userId,
@@ -3036,6 +3053,7 @@ export const removeTeamMember = internalMutation({
   },
   handler: async (ctx, args) => {
     const actor = await requireActor(ctx);
+    await requireRole(ctx as any, ROLES.ADMIN);
     const group = await resolveUserGroup(ctx, args.user, actor);
 
     if (!group.members.length) {
@@ -3244,6 +3262,7 @@ export const deleteEpic = internalMutation({
   },
   handler: async (ctx, args) => {
     const actor = await requireActor(ctx);
+    await requireRole(ctx as any, [ROLES.ADMIN, ROLES.USER]);
     let projectId: any;
     if (args.project) {
       const p = await resolveProject(ctx, args.project);
@@ -3370,6 +3389,7 @@ export const deleteStory = internalMutation({
   },
   handler: async (ctx, args) => {
     const actor = await requireActor(ctx);
+    await requireRole(ctx as any, [ROLES.ADMIN, ROLES.USER]);
     let projectId: any;
     if (args.project) {
       const p = await resolveProject(ctx, args.project);
@@ -3420,6 +3440,7 @@ export const bulkUpdateTasks = internalMutation({
   },
   handler: async (ctx, args) => {
     const actor = await requireActor(ctx);
+    await requireRole(ctx as any, [ROLES.ADMIN, ROLES.USER]);
     let projectId: any;
     let projectName: string | undefined;
     if (args.project) {
