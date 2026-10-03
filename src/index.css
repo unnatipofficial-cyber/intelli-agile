@@ -245,88 +245,189 @@
 /* Darkmatter Light */
 [data-theme="darkmatter"] {
   --radius: 0.75rem;
-  --background: #f8f7fa;
-  --foreground: #1a1528;
+  --background: #f7f7fb;
+  --foreground: #0e1119;
   --card: #ffffff;
-  --card-foreground: #1a1528;
+  --card-foreground: #0e1119;
   --popover: #ffffff;
-  --popover-foreground: #1a1528;
-  --primary: #d87943;
+  --popover-foreground: #0e1119;
+  --primary: #d9723a;
   --primary-foreground: #ffffff;
-  --secondary: #2a7a7a;
+  --secondary: #2a7f8a;
   --secondary-foreground: #ffffff;
-  --muted: #ede9f4;
-  --muted-foreground: #6e5f8a;
-  --accent: #e4f0f0;
-  --accent-foreground: #1a4a50;
-  --destructive: #d94052;
+  --muted: #eceef5;
+  --muted-foreground: #5d6580;
+  --accent: #e7eefa;
+  --accent-foreground: #12305a;
+  --destructive: #d9506a;
   --destructive-foreground: #ffffff;
-  --border: #d8d2e4;
-  --input: #ede9f4;
-  --ring: #d87943;
-  --chart-1: #2a7a7a;
-  --chart-2: #d87943;
-  --chart-3: #e78a53;
-  --chart-4: #7c5cbf;
-  --chart-5: #d94052;
-  --sidebar: #f0edf6;
-  --sidebar-foreground: #1a1528;
-  --sidebar-primary: #d87943;
+  --border: #d3d8e6;
+  --input: #eceef5;
+  --ring: #2a7f8a;
+  --chart-1: #2a7f8a;
+  --chart-2: #d9723a;
+  --chart-3: #d9506a;
+  --chart-4: #c9865a;
+  --chart-5: #8f9160;
+  --sidebar: #eff1f7;
+  --sidebar-foreground: #0e1119;
+  --sidebar-primary: #d9723a;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #e4f0f0;
-  --sidebar-accent-foreground: #1a4a50;
-  --sidebar-border: #d8d2e4;
-  --sidebar-ring: #d87943;
+  --sidebar-accent: #e7eefa;
+  --sidebar-accent-foreground: #12305a;
+  --sidebar-border: #d3d8e6;
+  --sidebar-ring: #2a7f8a;
   --glass: rgba(255, 255, 255, 0.78);
-  --glass-border: rgba(216, 210, 228, 0.6);
+  --glass-border: rgba(150, 170, 210, 0.45);
   --glass-hover: rgba(255, 255, 255, 0.95);
-  --aie-accent: #d87943;
-  --aie-accent-light: #e78a53;
-  --aie-accent-dark: #c06030;
-  --aie-glow-color: #e78a53;
+  --aie-accent: #d9723a;
+  --aie-accent-light: #e8b48c;
+  --aie-accent-dark: #b85c2a;
+  --aie-glow-color: #d9723a;
 }
 
 /* Darkmatter Dark */
+/* Darkmatter Dark
+   ────────────────────────────────────────────────────────────
+   A night, not a grey. The base is near-black with a blue cast, the
+   surfaces are blue-black rather than neutral grey, and the atmosphere
+   is cyan. That separation is the point: Graphite stays monochromatic
+   and restrained, so Darkmatter deliberately does *not* get darker —
+   it gets a different hue, which is what makes the two distinguishable.
+
+   Reference status/series palette, used consistently across charts,
+   legends and status indicators:
+     coral #F08090 · aqua #90E0E0 · peach #F0D0B0 · cream #E0E0C0
+     plus the amber #F09050 that identifies the theme itself. */
 .dark[data-theme="darkmatter"] {
-  --background: #0d0b14;
-  --foreground: #d4cde5;
-  --card: #161322;
-  --card-foreground: #d4cde5;
-  --popover: #161322;
-  --popover-foreground: #d4cde5;
+  --background: #05060d;
+  --foreground: #e8ebf5;
+  --card: #0c0f1c;
+  --card-foreground: #e8ebf5;
+  --popover: #0f1322;
+  --popover-foreground: #e8ebf5;
   --primary: #f09050;
-  --primary-foreground: #0d0b14;
-  --secondary: #3cc8b8;
-  --secondary-foreground: #0d0b14;
-  --muted: #1e1a30;
-  --muted-foreground: #9888b8;
-  --accent: #2a2248;
-  --accent-foreground: #c8bfe0;
-  --destructive: #f06070;
-  --destructive-foreground: #ffffff;
-  --border: #2e2850;
-  --input: #1e1a30;
-  --ring: #f09050;
-  --chart-1: #3cc8b8;
+  --primary-foreground: #1a0f06;
+  --secondary: #90e0e0;
+  --secondary-foreground: #061719;
+  --muted: #121628;
+  --muted-foreground: #8b95b5;
+  --accent: #16203a;
+  --accent-foreground: #cfe0ff;
+  --destructive: #f08090;
+  --destructive-foreground: #2a0c12;
+  --border: #1e2740;
+  --input: #121628;
+  --ring: #90e0e0;
+  --chart-1: #90e0e0;
   --chart-2: #f09050;
-  --chart-3: #fbcb97;
-  --chart-4: #7c5cbf;
-  --chart-5: #f06070;
-  --sidebar: #100e1a;
-  --sidebar-foreground: #d4cde5;
+  --chart-3: #f08090;
+  --chart-4: #f0d0b0;
+  --chart-5: #e0e0c0;
+  --sidebar: #080a14;
+  --sidebar-foreground: #e8ebf5;
   --sidebar-primary: #f09050;
-  --sidebar-primary-foreground: #0d0b14;
-  --sidebar-accent: #2a2248;
-  --sidebar-accent-foreground: #c8bfe0;
-  --sidebar-border: #2e2850;
-  --sidebar-ring: #f09050;
-  --glass: rgba(22, 19, 34, 0.82);
-  --glass-border: rgba(46, 40, 80, 0.55);
-  --glass-hover: rgba(22, 19, 34, 0.95);
+  --sidebar-primary-foreground: #1a0f06;
+  --sidebar-accent: #16203a;
+  --sidebar-accent-foreground: #cfe0ff;
+  --sidebar-border: #1e2740;
+  --sidebar-ring: #90e0e0;
+  --glass: rgba(10, 13, 26, 0.78);
+  --glass-border: rgba(64, 92, 140, 0.38);
+  --glass-hover: rgba(16, 21, 40, 0.94);
   --aie-accent: #f09050;
-  --aie-accent-light: #fbcb97;
+  --aie-accent-light: #f0d0b0;
   --aie-accent-dark: #d87943;
   --aie-glow-color: #f09050;
+}
+
+/* ════════════════════════════════════════════════════════════════
+   DARKMATTER — atmospheric identity on the public space pages
+   ════════════════════════════════════════════════════════════════
+
+   The landing page and the guide never paint `--background`: they paint
+   a starfield, and every layer of that sky was authored neutral so it
+   would read the same under any palette. That is exactly why Graphite
+   and Darkmatter looked alike — swapping tokens changed the accent, but
+   the background stayed the same black.
+
+   So Darkmatter takes ownership of its own night: a deeper blue-black
+   base, cyan haze overhead, a cool horizon and a low amber bloom. Every
+   rule is scoped to `[data-theme="darkmatter"]`, so Graphite's restrained
+   monochrome sky is left exactly as it was.
+   ════════════════════════════════════════════════════════════════ */
+
+/* Painted behind the canvas, so the stars and shooting stars still sit on
+   top of it while the sky itself becomes blue-black. */
+.dark[data-theme="darkmatter"] .space-backdrop {
+  background:
+    radial-gradient(72% 56% at 78% 6%, color-mix(in srgb, var(--chart-1) 15%, transparent) 0%, transparent 66%),
+    radial-gradient(58% 46% at 10% 88%, color-mix(in srgb, var(--primary) 10%, transparent) 0%, transparent 68%),
+    linear-gradient(180deg, #04050c 0%, #060915 48%, #0a1020 100%);
+}
+
+/* The haze itself: cyan where the neutral version used grey. */
+.dark[data-theme="darkmatter"] .space-nebula {
+  opacity: 0.92;
+  background:
+    radial-gradient(44% 36% at 14% 8%, color-mix(in srgb, var(--chart-1) 15%, transparent) 0%, transparent 70%),
+    radial-gradient(40% 32% at 86% 22%, color-mix(in srgb, var(--aie-glow-color) 12%, transparent) 0%, transparent 72%),
+    radial-gradient(52% 42% at 62% 92%, color-mix(in srgb, var(--aie-accent-light) 9%, transparent) 0%, transparent 74%);
+}
+
+/* Horizon: a cool blue horizon with a coral ember, instead of the neutral
+   version's brown wash. */
+.dark[data-theme="darkmatter"] .space-sunset-tint {
+  background:
+    radial-gradient(120% 58% at 50% 108%, rgba(52, 84, 126, 0.5) 0%, transparent 62%),
+    radial-gradient(88% 48% at 16% 96%, rgba(240, 128, 144, 0.2) 0%, transparent 66%),
+    linear-gradient(180deg, transparent 54%, rgba(10, 14, 28, 0.55) 100%);
+}
+
+/* The frame around the page follows the theme's own near-black rather than
+   the graphite constant, so the letterbox does not grey out the scene. */
+.dark[data-theme="darkmatter"] .aie-cinema-vignette {
+  background: radial-gradient(
+    118% 84% at 50% 46%,
+    transparent 40%,
+    rgba(3, 4, 10, calc(0.28 + var(--scroll-progress) * 0.45)) 100%
+  );
+}
+
+.dark[data-theme="darkmatter"] .aie-letterbox::before,
+.dark[data-theme="darkmatter"] .aie-letterbox::after {
+  background: linear-gradient(180deg, #04050c 0%, transparent 100%);
+}
+
+.dark[data-theme="darkmatter"] .aie-letterbox::after {
+  background: linear-gradient(0deg, #04050c 0%, transparent 100%);
+}
+
+/* The guide's preview frames are machined graphite, which is exactly right for
+   Graphite — and exactly wrong for Darkmatter, where eleven neutral grey
+   panels would have stayed identical under both themes. Under Darkmatter they
+   adopt the theme's own blue-black surfaces instead. Scoped, so Graphite's
+   authored panels are untouched. */
+.dark[data-theme="darkmatter"] .aie-graphite-panel {
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--card) 86%, transparent) 0%,
+    color-mix(in srgb, var(--muted) 82%, transparent) 100%
+  );
+  border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 18px 48px -28px rgba(0, 0, 0, 0.9);
+}
+
+.dark[data-theme="darkmatter"] .aie-graphite-rule {
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--border) 90%, transparent) 18%,
+    color-mix(in srgb, var(--border) 90%, transparent) 82%,
+    transparent
+  );
 }
 
 /* ── Base ────────────────────────────────────────────────────── */

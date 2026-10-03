@@ -184,8 +184,8 @@ const themes = [
   {
     name: "Darkmatter",
     tag: "After hours",
-    blurb: "Deep-space violet with a warm ember accent — the same engine, dressed for night.",
-    colors: ["#0d0b14", "#f09050", "#d4cde5"],
+    blurb: "Near-black blue with cyan haze and a warm ember accent — the same engine, dressed for night.",
+    colors: ["#05060d", "#f09050", "#e8ebf5"],
     ring: "ring-white/10",
   },
 ];

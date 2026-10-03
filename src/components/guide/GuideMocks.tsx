@@ -826,7 +826,7 @@ const settingsMenu = [
 const themeSwatches = [
   { name: "Graphite", colors: ["#0b0d0f", "#606060", "#f1f1ef"], active: true },
   { name: "Modern Minimal", colors: ["#171717", "#3b82f6", "#e5e5e5"], active: false },
-  { name: "Darkmatter", colors: ["#0d0b14", "#f09050", "#d4cde5"], active: false },
+  { name: "Darkmatter", colors: ["#05060d", "#f09050", "#e8ebf5"], active: false },
 ];
 
 export function SettingsMock() {
