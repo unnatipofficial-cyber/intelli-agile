@@ -1,7 +1,9 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { query, mutation, QueryCtx } from "./_generated/server";
+import { internal } from "./_generated/api";
 import { v } from "convex/values";
 import { requireRole, ROLES } from "./rbac";
+import { AUDIT_ACTIONS } from "../lib/audit";
 import { roleValidator } from "./schema";
 import { isEphemeralGuest, buildFullName } from "./helpers";
 
@@ -22,7 +24,18 @@ export const setRole = mutation({
     await requireRole(ctx, ROLES.ADMIN);
     const target = await ctx.db.get(args.userId);
     if (!target) throw new Error("That team member no longer exists.");
+
+    const previousRole = (target as { role?: unknown }).role ?? "user";
     await ctx.db.patch(args.userId, { role: args.role, updatedAt: Date.now() });
+
+    const targetName = target.name || target.email || "a team member";
+    await ctx.runMutation(internal.audit.record, {
+      action: AUDIT_ACTIONS.ROLE_CHANGED,
+      targetType: "user",
+      targetLabel: targetName,
+      details: `${targetName}: ${previousRole} → ${args.role}`,
+    });
+
     return { ok: true, role: args.role };
   },
 });
@@ -82,6 +95,16 @@ export const endGuestSession = mutation({
     // dangling rows.
     for (const account of accounts) await ctx.db.delete(account._id);
     for (const session of sessions) await ctx.db.delete(session._id);
+    // Recorded before the delete: the actor's own row is about to disappear,
+    // so there is nothing to resolve an actor name from afterwards.
+    await ctx.runMutation(internal.audit.record, {
+      action: AUDIT_ACTIONS.GUEST_PURGED,
+      targetType: "guest",
+      targetLabel: user.email || "anonymous session",
+      details: `removed ${accounts.length} auth account(s), ${sessions.length} session(s)`,
+      expectedActorId: userId,
+    });
+
     await ctx.db.delete(userId);
 
     return { purged: true, reason: "guest" as const };

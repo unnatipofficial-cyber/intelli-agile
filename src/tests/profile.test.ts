@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   buildFullName,
+  hasUsableName,
   needsProfileSetup,
   splitFullName,
 } from "../convex/helpers";
@@ -67,10 +68,41 @@ describe("buildFullName", () => {
   });
 });
 
+describe("hasUsableName", () => {
+  test("accepts a real name", () => {
+    expect(hasUsableName("Ada Lovelace")).toBe(true);
+    expect(hasUsableName("Prince")).toBe(true);
+  });
+
+  test("rejects blank, whitespace and non-string values", () => {
+    // Convex Auth can leave an empty string behind; treating that as "has a
+    // name" would skip the prompt and leave a nameless seat on the roster.
+    expect(hasUsableName("")).toBe(false);
+    expect(hasUsableName("   ")).toBe(false);
+    expect(hasUsableName(undefined)).toBe(false);
+    expect(hasUsableName(null)).toBe(false);
+    expect(hasUsableName(7)).toBe(false);
+  });
+});
+
 describe("needsProfileSetup", () => {
-  test("prompts an account that has never been onboarded", () => {
+  test("prompts an account that has never been onboarded and has no name", () => {
     expect(needsProfileSetup({})).toBe(true);
-    expect(needsProfileSetup({ name: "Ada Lovelace" })).toBe(true);
+    expect(needsProfileSetup({ name: "" })).toBe(true);
+    expect(needsProfileSetup({ name: "   " })).toBe(true);
+  });
+
+  test("does NOT prompt someone who already has a name", () => {
+    // Google and OTP sign-ins usually arrive with a name, and accounts created
+    // before this prompt existed already have one. They already answered the
+    // question somewhere else, so blocking them behind a modal to re-type a
+    // name the app is already displaying is pure friction.
+    expect(needsProfileSetup({ name: "Ada Lovelace" })).toBe(false);
+    expect(needsProfileSetup({ name: "Prince" })).toBe(false);
+  });
+
+  test("still prompts a guest even if it somehow has a name", () => {
+    expect(needsProfileSetup({ isAnonymous: true, name: "Ghost" })).toBe(false);
   });
 
   test("stops prompting once completed", () => {

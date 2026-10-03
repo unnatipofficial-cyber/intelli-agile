@@ -60,23 +60,39 @@ export function buildFullName(firstName: string, lastName?: string | null): stri
 }
 
 /**
- * True when a real (non-Guest) account has never been through the name prompt.
+ * True when a real (non-Guest) account still needs the name prompt.
  *
  * `profileCompletedAt` is the authoritative "asked and answered" flag, so the
  * prompt shows exactly once per account and never again on later sign-ins.
+ *
+ * The `name` clause is the fix for accounts created before the prompt existed
+ * and for providers that already supplied a name. Those people do not need to be
+ * asked — they already answered, just somewhere else — and blocking them behind
+ * a modal to re-type a name the app is already displaying is pure friction.
+ * A blank or whitespace-only name does not count as an answer.
  *
  * Guests are excluded on purpose: their row is deleted on sign-out, so a prompt
  * for them would be both unskippable and pointless.
  */
 export function needsProfileSetup(
   user:
-    | { profileCompletedAt?: unknown; isAnonymous?: unknown }
+    | { profileCompletedAt?: unknown; isAnonymous?: unknown; name?: unknown }
     | null
     | undefined,
 ): boolean {
   if (!user) return false;
   if (isEphemeralGuest(user)) return false;
-  return user.profileCompletedAt == null;
+  if (user.profileCompletedAt != null) return false;
+  return !hasUsableName(user.name);
+}
+
+/**
+ * True when a stored name is something we can actually show on the roster.
+ * Guards against `""` and `"   "`, which Convex Auth can leave behind and which
+ * would otherwise read as "has a name" while rendering as an empty seat.
+ */
+export function hasUsableName(name: unknown): boolean {
+  return typeof name === "string" && name.trim().length > 0;
 }
 
 /**

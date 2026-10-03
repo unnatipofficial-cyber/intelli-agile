@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import {
+  buildInviteLink,
   classifySignInIdentifier,
+  INVITE_AUTH_ROUTE,
   isInviteTokenShape,
 } from "../lib/invite";
 
@@ -60,5 +62,44 @@ describe("classifySignInIdentifier", () => {
   test("treats anything with an @ as an email, even if odd", () => {
     // Convex Auth owns email validation; we only need to route, not judge.
     expect(classifySignInIdentifier("a@b")).toBe("email");
+  });
+});
+
+describe("buildInviteLink", () => {
+  test("builds an absolute link the sign-in screens can open", () => {
+    expect(buildInviteLink("https://aie.example.com", "B9TWB3BV")).toBe(
+      "https://aie.example.com/auth?invite=B9TWB3BV",
+    );
+  });
+
+  test("normalises the token to uppercase", () => {
+    // Tokens are minted uppercase; normalising means a lowercase value from
+    // anywhere still produces a link the server will resolve.
+    expect(buildInviteLink("https://aie.example.com", "b9twb3bv")).toBe(
+      "https://aie.example.com/auth?invite=B9TWB3BV",
+    );
+  });
+
+  test("does not double up slashes on the origin", () => {
+    expect(buildInviteLink("https://aie.example.com/", "B9TWB3BV")).toBe(
+      "https://aie.example.com/auth?invite=B9TWB3BV",
+    );
+  });
+
+  test("falls back to a relative link without an origin", () => {
+    // Degrades to a usable relative path instead of "undefined/auth?...".
+    expect(buildInviteLink(undefined, "B9TWB3BV")).toBe(
+      "/auth?invite=B9TWB3BV",
+    );
+    expect(buildInviteLink("   ", "B9TWB3BV")).toBe("/auth?invite=B9TWB3BV");
+  });
+
+  test("points at the route the app actually registers", () => {
+    // Guards the copy against a rename of the auth route: a link built to a
+    // stale path looks fine in the admin panel and 404s for the invitee.
+    expect(buildInviteLink("https://aie.example.com", "B9TWB3BV")).toContain(
+      INVITE_AUTH_ROUTE,
+    );
+    expect(INVITE_AUTH_ROUTE).toBe("/auth");
   });
 });

@@ -249,6 +249,14 @@ export default function Landing() {
 
   const goToAuth = useCallback(() => navigate(AUTH_ROUTE), [navigate]);
 
+  // A direct route into a throwaway session: no email code, no account, nothing
+  // to clean up. `?guest=1` is read by the sign-in screen, which starts the
+  // anonymous sign-in on arrival, so the preview is one click instead of three.
+  const goToGuestPreview = useCallback(
+    () => navigate(`${AUTH_ROUTE}?guest=1`),
+    [navigate],
+  );
+
   return (
     <>
       {/* Fixed sky behind the whole page. It lives outside the page wrapper so
@@ -392,6 +400,17 @@ export default function Landing() {
                     Open the dashboard <ArrowRight className="h-4 w-4" />
                   </Button>
                 </MagneticButton>
+                <Button
+                  size="lg"
+                  variant="outline"
+                  onClick={goToGuestPreview}
+                  data-cursor="hover"
+                  className="gap-2 px-6"
+                  title="Explore with sample data — no account, no email code"
+                >
+                  <Sparkles className="h-4 w-4" />
+                  Try it instantly
+                </Button>
                 <Button
                   size="lg"
                   variant="outline"
@@ -750,6 +769,16 @@ export default function Landing() {
                       Open AIE <ArrowRight className="h-4 w-4" />
                     </Button>
                   </MagneticButton>
+                  <Button
+                    size="lg"
+                    variant="outline"
+                    onClick={goToGuestPreview}
+                    data-cursor="hover"
+                    className="gap-2 px-8"
+                  >
+                    <Sparkles className="h-4 w-4" />
+                    Try without an account
+                  </Button>
                   <Button
                     size="lg"
                     variant="outline"

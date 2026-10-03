@@ -300,6 +300,24 @@ function AuthFormContainer({
     }
   }, [authLoading, isAuthenticated, navigate, redirect]);
 
+  // `?guest=1` means "I just want to look around" — start the throwaway session
+  // on arrival rather than making someone hunt for the guest button. Runs once
+  // per mount: the ref guard matters because this screen is mounted inside a
+  // StrictMode double-invoke in dev, and a second anonymous sign-in would race
+  // the first and could produce two guest rows.
+  const autoGuestStarted = useRef(false);
+  const wantsGuest = searchParams.get("guest") === "1";
+  useEffect(() => {
+    if (!wantsGuest) return;
+    if (authLoading || isAuthenticated) return;
+    if (autoGuestStarted.current) return;
+    autoGuestStarted.current = true;
+    void handleGuest();
+    // `handleGuest` is intentionally omitted: it is re-created on every render
+    // and would re-fire this effect, defeating the ref guard above.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wantsGuest, authLoading, isAuthenticated]);
+
   // Reset the flow whenever the user switches between sign in / sign up.
   // Guarded against the mount pass: this effect also fires on first render, and
   // an unguarded reset there would immediately wipe the code we just restored.

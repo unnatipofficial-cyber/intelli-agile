@@ -6,7 +6,13 @@ import { useTheme } from "@/hooks/use-theme";
 import type { AppTheme } from "@/hooks/use-theme";
 import { motion } from "framer-motion";
 import { useState } from "react";
-import { cn } from "@/lib/utils";
+import { cn, copyText } from "@/lib/utils";
+import { buildInviteLink } from "@/lib/invite";
+import {
+  AUDIT_ACTION_LABELS,
+  truncateAuditDetail,
+  type AuditAction,
+} from "@/lib/audit";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -34,6 +40,8 @@ import {
   Check,
   X,
   Loader2,
+  Copy,
+  ScrollText,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useNavigate } from "react-router";
@@ -187,6 +195,10 @@ export default function SettingsPage() {
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<"admin" | "user" | "member">("member");
   const [sending, setSending] = useState(false);
+  const [copiedInviteId, setCopiedInviteId] = useState<string | null>(null);
+
+  // Admin-only audit trail of workspace-level actions.
+  const auditLog = useQuery(api.audit.list, { limit: 50 });
 
   const handleSendInvite = async () => {
     const email = inviteEmail.trim();
@@ -200,11 +212,37 @@ export default function SettingsPage() {
           : `Invitation created for ${result.email}, but the email could not be sent.`
       );
       setInviteEmail("");
+      // When the email didn't go out, hand them the link directly rather than
+      // leaving them with an invitation they can neither use nor see.
+      if (!result.emailed) {
+        void handleCopyInvite({
+          _id: "pending",
+          token: result.token,
+        });
+      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not send the invitation");
     } finally {
       setSending(false);
     }
+  };
+
+  const handleCopyInvite = async (invite: { _id: string; token: string }) => {
+    const link = buildInviteLink(
+      typeof window === "undefined" ? undefined : window.location.origin,
+      invite.token,
+    );
+    const copied = await copyText(link);
+    if (!copied) {
+      toast.error("Couldn't copy — your browser blocked clipboard access.");
+      return;
+    }
+    setCopiedInviteId(invite._id);
+    toast.success("Invite link copied. Share it however you like.");
+    window.setTimeout(
+      () => setCopiedInviteId((current) => (current === invite._id ? null : current)),
+      2000,
+    );
   };
 
   const unreadNotifications = notifications?.filter((n) => !n.isRead) || [];
@@ -577,18 +615,87 @@ export default function SettingsPage() {
                             : ` · expires ${new Date(invite.expiresAt).toLocaleDateString()}`}
                       </p>
                     </div>
-                    {!invite.used && (
-                      <button
-                        onClick={() => revokeInvite({ invitationId: invite._id })}
-                        className="p-1 rounded hover:bg-accent/50 text-destructive"
-                        title="Revoke invitation"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                    {!invite.used && !invite.expired && (
+                      <>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => handleCopyInvite(invite)}
+                          className="h-7 shrink-0 gap-1.5 px-2 text-xs"
+                          title="Copy a shareable invite link"
+                        >
+                          {copiedInviteId === invite._id ? (
+                            <Check className="w-3.5 h-3.5" />
+                          ) : (
+                            <Copy className="w-3.5 h-3.5" />
+                          )}
+                          {copiedInviteId === invite._id ? "Copied" : "Copy link"}
+                        </Button>
+                        <button
+                          onClick={() => revokeInvite({ invitationId: invite._id })}
+                          className="p-1 shrink-0 rounded hover:bg-accent/50 text-destructive"
+                          title="Revoke invitation"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </>
                     )}
                   </div>
                 ))}
               </div>
+            )}
+          </div>
+
+          {/* Audit trail */}
+          <div className="glass-card p-5">
+            <div className="flex items-center gap-2 mb-1">
+              <ScrollText className="w-4 h-4 text-primary" />
+              <h3 className="text-sm font-bold">Audit Trail</h3>
+            </div>
+            <p className="text-xs text-muted-foreground mb-4">
+              Who changed roles, sent or revoked invitations, and purged guest
+              sessions. Append-only.
+            </p>
+            {auditLog && auditLog.length > 0 ? (
+              <ol className="space-y-2">
+                {auditLog.map((entry) => (
+                  <li
+                    key={entry._id}
+                    className="flex items-start gap-3 p-2 rounded-lg border border-border/50"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm">
+                        <span className="font-medium">{entry.actorName}</span>{" "}
+                        <span className="text-muted-foreground">
+                          {AUDIT_ACTION_LABELS[entry.action as AuditAction] ??
+                            entry.action}
+                        </span>
+                        {entry.targetLabel && (
+                          <>
+                            {" "}
+                            <span className="font-medium">{entry.targetLabel}</span>
+                          </>
+                        )}
+                      </p>
+                      {entry.details && (
+                        <p className="text-[10px] text-muted-foreground break-words">
+                          {truncateAuditDetail(entry.details)}
+                        </p>
+                      )}
+                    </div>
+                    <time
+                      dateTime={new Date(entry.createdAt).toISOString()}
+                      className="shrink-0 text-[10px] text-muted-foreground"
+                    >
+                      {new Date(entry.createdAt).toLocaleString()}
+                    </time>
+                  </li>
+                ))}
+              </ol>
+            ) : (
+              <p className="text-sm text-muted-foreground text-center py-4">
+                No workspace administration recorded yet
+              </p>
             )}
           </div>
         </>

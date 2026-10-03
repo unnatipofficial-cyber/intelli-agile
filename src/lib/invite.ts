@@ -10,6 +10,27 @@
 /** Must stay in sync with `TOKEN_ALPHABET` in `src/convex/invitations.ts`. */
 const TOKEN_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
+/** Where an invite link sends someone. Must match the route in `main.tsx`. */
+export const INVITE_AUTH_ROUTE = "/auth";
+
+/**
+ * Build the shareable link for an invitation.
+ *
+ * The invitation email can only carry the bare token as text — the relay we
+ * use delivers codes, not rich bodies — so the link is what an admin actually
+ * shares in Slack or over chat. Same query parameter the sign-in screens read.
+ *
+ * `origin` is passed in rather than read from `window` so this stays a pure
+ * function that can be tested, and so a bad/absent origin degrades to a
+ * relative path instead of producing `undefined/auth?invite=…`.
+ */
+export function buildInviteLink(origin: string | undefined, token: string): string {
+  const normalizedToken = (token ?? "").trim().toUpperCase();
+  const path = `${INVITE_AUTH_ROUTE}?invite=${normalizedToken}`;
+  const base = (origin ?? "").trim().replace(/\/+$/, "");
+  return base ? `${base}${path}` : path;
+}
+
 /**
  * True when the input looks like an invite token: exactly 8 characters drawn
  * from the alphabet, which deliberately excludes `I`, `O`, `0` and `1` so a

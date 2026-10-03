@@ -40,6 +40,34 @@ const schema = defineSchema(
       .index("email", ["email"])
       .index("by_role", ["role"]),
 
+    /**
+     * Append-only record of workspace-administration actions: role changes,
+     * invitations created / revoked / accepted, and Guest session purges.
+     *
+     * Deliberately separate from `activityLogs`. Those are project-scoped and
+     * describe work happening inside a project; these events have no project,
+     * they are about who is in the workspace and what they may do to it. An
+     * admin panel with no history of its own actions cannot answer "who
+     * promoted this person?", which is the whole point of gating on role.
+     *
+     * `actorName` is denormalised on purpose: the row must still read sensibly
+     * after the actor's account is deleted (a purged Guest, say), which is
+     * exactly when the history matters most.
+     */
+    adminAuditLogs: defineTable({
+      /** Who did it. Optional: a purge deletes the row it is recording. */
+      actorId: v.optional(v.id("users")),
+      actorName: v.string(),
+      action: v.string(),
+      targetType: v.string(),
+      targetLabel: v.optional(v.string()),
+      /** New and previous role for a role change, etc. Rendered as detail. */
+      details: v.optional(v.string()),
+      createdAt: v.number(),
+    })
+      .index("by_time", ["createdAt"])
+      .index("by_action", ["action"]),
+
     /** Invitations let someone join the workspace without an account of their own. */
     invitations: defineTable({
       email: v.string(),

@@ -3,6 +3,7 @@ import { action, mutation, internalMutation, query } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { ROLES, requireRole, roleFromUser, type Role } from "./rbac";
+import { AUDIT_ACTIONS } from "../lib/audit";
 import { roleValidator } from "./schema";
 
 /**
@@ -150,6 +151,14 @@ export const create = internalMutation({
       expiresAt: now + INVITE_TTL_MS,
       createdAt: now,
     });
+
+    await ctx.runMutation(internal.audit.record, {
+      action: AUDIT_ACTIONS.INVITE_CREATED,
+      targetType: "invitation",
+      targetLabel: email,
+      details: `${email} invited as ${args.role ?? ROLES.MEMBER}`,
+    });
+
     return { token, email, role: args.role ?? ROLES.MEMBER };
   },
 });
@@ -205,7 +214,15 @@ export const revoke = mutation({
   args: { invitationId: v.id("invitations") },
   handler: async (ctx, args) => {
     await requireRole(ctx, ROLES.ADMIN);
+    // Read the row before deleting it: the label is the only thing left to
+    // identify which invitation was withdrawn.
+    const invite = await ctx.db.get(args.invitationId);
     await ctx.db.delete(args.invitationId);
+    await ctx.runMutation(internal.audit.record, {
+      action: AUDIT_ACTIONS.INVITE_REVOKED,
+      targetType: "invitation",
+      targetLabel: invite?.email,
+    });
     return { ok: true };
   },
 });
@@ -244,6 +261,14 @@ export const accept = mutation({
 
     await ctx.db.patch(userId, { role: next, updatedAt: Date.now() });
     await ctx.db.patch(invite._id, { usedBy: userId, usedAt: Date.now() });
+
+    const who = (me as { name?: unknown } | null)?.name || invite.email;
+    await ctx.runMutation(internal.audit.record, {
+      action: AUDIT_ACTIONS.INVITE_ACCEPTED,
+      targetType: "invitation",
+      targetLabel: invite.email,
+      details: `${who} joined as ${next}`,
+    });
 
     return { ok: true, role: next, email: invite.email };
   },

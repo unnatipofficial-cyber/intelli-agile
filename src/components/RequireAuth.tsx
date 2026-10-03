@@ -31,8 +31,17 @@ export function RequireAuth({ children }: { children: ReactNode }) {
   // than on a specific page so it is impossible to route around: whichever
   // protected page a new sign-in lands on, the prompt appears. Once the server
   // records profileCompletedAt this renders nothing again.
+  //
+  // The page renders *behind* the dialog rather than being replaced by it. An
+  // earlier version returned the dialog alone, so a new user saw a modal floating
+  // on an empty screen with no sense of the app they were signing in to.
   if (needsProfileSetup(user)) {
-    return <ProfileSetupDialog />;
+    return (
+      <>
+        {children}
+        <ProfileSetupDialog />
+      </>
+    );
   }
 
   return children;
