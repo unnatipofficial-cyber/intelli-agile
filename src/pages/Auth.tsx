@@ -23,6 +23,56 @@ import logo from "@/assets/logo.svg";
 import { ArrowRight, CheckCircle2, Loader2, Mail, Ticket, UserX } from "lucide-react";
 import { Suspense, useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
+import {
+  formatCountdown,
+  isOtpExpired,
+  remainingSeconds,
+} from "@/lib/otp";
+
+/**
+ * The pending code lives in sessionStorage rather than component state so that
+ * stepping away to check email — in another tab, another window, or the same
+ * tab after a refresh — lands you back on "enter your code" with the same code
+ * still valid, instead of dumping you on the email screen to request another.
+ *
+ * sessionStorage (not localStorage) so the window does not outlive the tab: a
+ * code generated yesterday should never be sitting there waiting to be reused.
+ */
+const PENDING_OTP_KEY = "aie.pending-otp";
+
+interface PendingOtp {
+  email: string;
+  sentAt: number;
+}
+
+/** Restore a pending code, discarding one that has already aged out. */
+function readPendingOtp(): PendingOtp | null {
+  try {
+    const raw = window.sessionStorage.getItem(PENDING_OTP_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<PendingOtp> | null;
+    if (!parsed || typeof parsed.email !== "string") return null;
+    if (typeof parsed.sentAt !== "number") return null;
+    // Already past its 2 minutes: drop it rather than showing a dead form.
+    if (isOtpExpired(parsed.sentAt)) return null;
+    return { email: parsed.email, sentAt: parsed.sentAt };
+  } catch {
+    // Private-mode Safari and friends can throw on access; treat as "no code".
+    return null;
+  }
+}
+
+function writePendingOtp(pending: PendingOtp | null) {
+  try {
+    if (pending) {
+      window.sessionStorage.setItem(PENDING_OTP_KEY, JSON.stringify(pending));
+    } else {
+      window.sessionStorage.removeItem(PENDING_OTP_KEY);
+    }
+  } catch {
+    // Storage being unavailable must not break sign-in.
+  }
+}
 
 interface AuthProps {
   redirectAfterAuth?: string;
@@ -53,11 +103,46 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
     searchParams.get("returnTo"),
     redirectAfterAuth,
   );
-  const [step, setStep] = useState<"signIn" | { email: string }>("signIn");
+  const [pendingOtp, setPendingOtp] = useState<PendingOtp | null>(() =>
+    readPendingOtp(),
+  );
   const [otp, setOtp] = useState("");
   const [email, setEmail] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Drives the countdown. Kept as a separate ticking value rather than
+  // storing the seconds directly so the interval only forces one re-render per
+  // second and never fights a stale closure over the sent timestamp.
+  const [now, setNow] = useState(() => Date.now());
+
+  const secondsLeft = pendingOtp ? remainingSeconds(pendingOtp.sentAt, now) : 0;
+  const otpExpired = !!pendingOtp && secondsLeft <= 0;
+  const step = pendingOtp ? ({ email: pendingOtp.email } as const) : ("signIn" as const);
+
+  const updatePendingOtp = (next: PendingOtp | null) => {
+    setPendingOtp(next);
+    writePendingOtp(next);
+  };
+
+  useEffect(() => {
+    if (!pendingOtp) return;
+    // Re-sync immediately on resume: a backgrounded tab can have its timers
+    // throttled hard enough to miss ticks entirely, so we never trust the
+    // interval alone to keep the clock honest.
+    setNow(Date.now());
+    const id = window.setInterval(() => {
+      const current = Date.now();
+      // Stop ticking once the window closes. Left running, an expired code
+      // would keep forcing a re-render every second forever.
+      if (remainingSeconds(pendingOtp.sentAt, current) <= 0) {
+        window.clearInterval(id);
+        setNow(current);
+        return;
+      }
+      setNow(current);
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, [pendingOtp]);
 
   // A short invite link (`/auth?invite=<token>`) turns this page into a
   // passwordless acceptance screen: the address is pre-filled from the invite,
@@ -101,7 +186,10 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
     try {
       const formData = new FormData(event.currentTarget);
       await signIn("email-otp", formData);
-      setStep({ email: formData.get("email") as string });
+      updatePendingOtp({
+        email: formData.get("email") as string,
+        sentAt: Date.now(),
+      });
       setIsLoading(false);
     } catch (error) {
       console.error("Email sign-in error:", error);
@@ -124,6 +212,8 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
 
       console.log("signed in");
 
+      // The code is spent; don't leave it waiting in storage to be replayed.
+      updatePendingOtp(null);
       navigate(redirect);
     } catch (error) {
       console.error("OTP verification error:", error);
@@ -132,6 +222,27 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
       setIsLoading(false);
 
       setOtp("");
+    }
+  };
+
+  const handleResend = async () => {
+    if (!pendingOtp) return;
+    setIsLoading(true);
+    setError(null);
+    try {
+      const formData = new FormData();
+      formData.set("email", pendingOtp.email);
+      await signIn("email-otp", formData);
+      updatePendingOtp({ email: pendingOtp.email, sentAt: Date.now() });
+      setOtp("");
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Could not send a new code. Please try again.",
+      );
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -267,6 +378,14 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
                 <CardTitle>Verify your email</CardTitle>
                 <CardDescription>
                   We sent a verification code to {step.email}
+                  {!otpExpired && (
+                    <span className="mt-1 block">
+                      Code expires in{" "}
+                      <span className="font-medium text-foreground tabular-nums">
+                        {formatCountdown(secondsLeft)}
+                      </span>
+                    </span>
+                  )}
                 </CardDescription>
               </CardHeader>
               <form onSubmit={handleOtpSubmit}>
@@ -279,9 +398,14 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
                       value={otp}
                       onChange={setOtp}
                       maxLength={6}
-                      disabled={isLoading}
+                      disabled={isLoading || otpExpired}
                       onKeyDown={(e) => {
-                        if (e.key === "Enter" && otp.length === 6 && !isLoading) {
+                        if (
+                          e.key === "Enter" &&
+                          otp.length === 6 &&
+                          !isLoading &&
+                          !otpExpired
+                        ) {
                           // Find the closest form and submit it
                           const form = (e.target as HTMLElement).closest("form");
                           if (form) {
@@ -302,14 +426,21 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
                       {error}
                     </p>
                   )}
+                  {otpExpired && !error && (
+                    <p className="mt-2 text-sm text-amber-600 dark:text-amber-500 text-center">
+                      This code has expired. Send a new one to continue.
+                    </p>
+                  )}
                   <p className="text-sm text-muted-foreground text-center mt-4">
                     Didn't receive a code?{" "}
                     <Button
+                      type="button"
                       variant="link"
                       className="p-0 h-auto"
-                      onClick={() => setStep("signIn")}
+                      onClick={handleResend}
+                      disabled={isLoading}
                     >
-                      Try again
+                      {otpExpired ? "Send a new code" : "Resend code"}
                     </Button>
                   </p>
                 </CardContent>
@@ -317,7 +448,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
                   <Button
                     type="submit"
                     className="w-full"
-                    disabled={isLoading || otp.length !== 6}
+                    disabled={isLoading || otpExpired || otp.length !== 6}
                   >
                     {isLoading ? (
                       <>
@@ -334,7 +465,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
                   <Button
                     type="button"
                     variant="ghost"
-                    onClick={() => setStep("signIn")}
+                    onClick={() => updatePendingOtp(null)}
                     disabled={isLoading}
                     className="w-full"
                   >
