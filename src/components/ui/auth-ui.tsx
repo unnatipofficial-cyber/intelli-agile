@@ -1,7 +1,14 @@
 "use client";
 
 import * as React from "react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+import {
+  formatCountdown,
+  readPendingOtp,
+  remainingSeconds,
+  writePendingOtp,
+  type PendingOtp,
+} from "@/lib/otp";
 import { Slot } from "@radix-ui/react-slot";
 import * as LabelPrimitive from "@radix-ui/react-label";
 import { cva, type VariantProps } from "class-variance-authority";
@@ -242,12 +249,41 @@ function AuthFormContainer({
   const providerConfig = useQuery(api.authProviders.enabled);
   const googleEnabled = providerConfig?.google === true;
 
-  const [step, setStep] = useState<"email" | "code">("email");
-  const [email, setEmail] = useState("");
+  const [pendingOtp, setPendingOtp] = useState<PendingOtp | null>(() =>
+    readPendingOtp(),
+  );
+  const [email, setEmail] = useState(pendingOtp?.email ?? "");
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
   const [isPending, setIsPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Ticking clock for the countdown; the interval stops itself once the code
+  // expires rather than re-rendering forever on a dead one.
+  const [now, setNow] = useState(() => Date.now());
+
+  const secondsLeft = pendingOtp ? remainingSeconds(pendingOtp.sentAt, now) : 0;
+  const otpExpired = !!pendingOtp && secondsLeft <= 0;
+  const step: "email" | "code" = pendingOtp ? "code" : "email";
+
+  const updatePendingOtp = (next: PendingOtp | null) => {
+    setPendingOtp(next);
+    writePendingOtp(next);
+  };
+
+  useEffect(() => {
+    if (!pendingOtp) return;
+    setNow(Date.now());
+    const id = window.setInterval(() => {
+      const current = Date.now();
+      if (remainingSeconds(pendingOtp.sentAt, current) <= 0) {
+        window.clearInterval(id);
+        setNow(current);
+        return;
+      }
+      setNow(current);
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, [pendingOtp]);
 
   // Already signed in? Send them straight to the app.
   useEffect(() => {
@@ -257,8 +293,13 @@ function AuthFormContainer({
   }, [authLoading, isAuthenticated, navigate, redirect]);
 
   // Reset the flow whenever the user switches between sign in / sign up.
+  // Guarded against the mount pass: this effect also fires on first render, and
+  // an unguarded reset there would immediately wipe the code we just restored.
+  const lastSignInMode = useRef(isSignIn);
   useEffect(() => {
-    setStep("email");
+    if (lastSignInMode.current === isSignIn) return;
+    lastSignInMode.current = isSignIn;
+    updatePendingOtp(null);
     setCode("");
     setError(null);
   }, [isSignIn]);
@@ -275,7 +316,7 @@ function AuthFormContainer({
         ...(name.trim() && !isSignIn ? { name: name.trim() } : {}),
         redirectTo: redirect,
       });
-      setStep("code");
+      updatePendingOtp({ email, sentAt: Date.now() });
     } catch (err) {
       console.error("Email sign-in error:", err);
       setError(
@@ -296,11 +337,35 @@ function AuthFormContainer({
     setError(null);
     try {
       await signIn("email-otp", { email, code, redirectTo: redirect });
+      updatePendingOtp(null);
       navigate(redirect, { replace: true });
     } catch (err) {
       console.error("Code verification error:", err);
       setError("That code didn't match. Check your inbox and try again.");
       setCode("");
+    } finally {
+      setIsPending(false);
+    }
+  };
+
+  const handleResend = async () => {
+    if (!pendingOtp) return;
+    setIsPending(true);
+    setError(null);
+    try {
+      await signIn("email-otp", {
+        email: pendingOtp.email,
+        redirectTo: redirect,
+      });
+      updatePendingOtp({ email: pendingOtp.email, sentAt: Date.now() });
+      setCode("");
+    } catch (err) {
+      console.error("Resend error:", err);
+      setError(
+        err instanceof Error && err.message
+          ? err.message
+          : "We couldn't send another code. Try again.",
+      );
     } finally {
       setIsPending(false);
     }
@@ -355,12 +420,25 @@ function AuthFormContainer({
         ? "Enter your email and we'll send you a sign-in code"
         : "Enter your details and we'll send you a verification code";
 
+  // Shown under the heading while the code is still inside its 2-minute
+  // window, so it is obvious the code you are typing is still worth using.
+  const countdownLine =
+    step === "code" && !otpExpired ? (
+      <span className="mt-1 block">
+        Code expires in{" "}
+        <span className="font-medium text-foreground tabular-nums">
+          {formatCountdown(secondsLeft)}
+        </span>
+      </span>
+    ) : null;
+
   return (
     <div className="mx-auto grid w-[350px] gap-6">
       <div className="flex flex-col items-center gap-2 text-center">
         <h1 className="text-2xl font-bold tracking-tight">{heading}</h1>
         <p className="text-balance text-sm text-muted-foreground">
           {subheading}
+          {countdownLine}
         </p>
       </div>
 
@@ -434,7 +512,7 @@ function AuthFormContainer({
               value={code}
               onChange={setCode}
               maxLength={6}
-              disabled={isPending}
+              disabled={isPending || otpExpired}
               autoFocus
             >
               <InputOTPGroup>
@@ -451,7 +529,13 @@ function AuthFormContainer({
             </p>
           )}
 
-          <Button type="submit" disabled={isPending || code.length !== 6}>
+          {otpExpired && !error && (
+            <p className="text-center text-sm text-amber-600 dark:text-amber-500">
+              This code has expired. Send a new one to continue.
+            </p>
+          )}
+
+          <Button type="submit" disabled={isPending || otpExpired || code.length !== 6}>
             {isPending && <Loader2 className="mr-2 size-4 animate-spin" />}
             Verify code
           </Button>
@@ -459,8 +543,17 @@ function AuthFormContainer({
           <Button
             type="button"
             variant="ghost"
+            onClick={handleResend}
+            disabled={isPending}
+          >
+            {otpExpired ? "Send a new code" : "Resend code"}
+          </Button>
+
+          <Button
+            type="button"
+            variant="ghost"
             onClick={() => {
-              setStep("email");
+              updatePendingOtp(null);
               setCode("");
               setError(null);
             }}

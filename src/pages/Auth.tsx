@@ -25,54 +25,20 @@ import { Suspense, useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import {
   formatCountdown,
-  isOtpExpired,
+  readPendingOtp,
   remainingSeconds,
+  writePendingOtp,
+  type PendingOtp,
 } from "@/lib/otp";
 
 /**
- * The pending code lives in sessionStorage rather than component state so that
- * stepping away to check email — in another tab, another window, or the same
- * tab after a refresh — lands you back on "enter your code" with the same code
- * still valid, instead of dumping you on the email screen to request another.
+ * The pending code lives in sessionStorage (see `@/lib/otp`) rather than
+ * component state so that stepping away to check email — another tab, another
+ * window, or a refresh of this same tab — lands you back on "enter your code"
+ * with the same code still valid, instead of dumping you on the email screen.
  *
- * sessionStorage (not localStorage) so the window does not outlive the tab: a
- * code generated yesterday should never be sitting there waiting to be reused.
+ * Shared with the `/auth/ui` sign-in screen so both behave identically.
  */
-const PENDING_OTP_KEY = "aie.pending-otp";
-
-interface PendingOtp {
-  email: string;
-  sentAt: number;
-}
-
-/** Restore a pending code, discarding one that has already aged out. */
-function readPendingOtp(): PendingOtp | null {
-  try {
-    const raw = window.sessionStorage.getItem(PENDING_OTP_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as Partial<PendingOtp> | null;
-    if (!parsed || typeof parsed.email !== "string") return null;
-    if (typeof parsed.sentAt !== "number") return null;
-    // Already past its 2 minutes: drop it rather than showing a dead form.
-    if (isOtpExpired(parsed.sentAt)) return null;
-    return { email: parsed.email, sentAt: parsed.sentAt };
-  } catch {
-    // Private-mode Safari and friends can throw on access; treat as "no code".
-    return null;
-  }
-}
-
-function writePendingOtp(pending: PendingOtp | null) {
-  try {
-    if (pending) {
-      window.sessionStorage.setItem(PENDING_OTP_KEY, JSON.stringify(pending));
-    } else {
-      window.sessionStorage.removeItem(PENDING_OTP_KEY);
-    }
-  } catch {
-    // Storage being unavailable must not break sign-in.
-  }
-}
 
 interface AuthProps {
   redirectAfterAuth?: string;

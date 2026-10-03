@@ -41,3 +41,53 @@ export function formatCountdown(seconds: number): string {
   const minutes = Math.floor(safe / 60);
   return `${minutes}:${String(safe % 60).padStart(2, "0")}`;
 }
+
+/**
+ * Storage key for the in-flight code, shared by BOTH sign-in screens (`/auth`
+ * and `/auth/ui`). One key on purpose: if the two pages ever disagree the code
+ * you just requested silently disappears when you move between them.
+ *
+ * sessionStorage rather than localStorage so the code cannot outlive the tab.
+ */
+export const PENDING_OTP_KEY = "aie.pending-otp";
+
+export interface PendingOtp {
+  email: string;
+  sentAt: number;
+}
+
+/**
+ * Restore the in-flight code, or null if there is none or it has aged out.
+ *
+ * Storage is wrapped because private-mode Safari and hardened browser configs
+ * throw on `sessionStorage` access, and failing to read must never break
+ * sign-in — it just means the user asks for a new code.
+ */
+export function readPendingOtp(now: number = Date.now()): PendingOtp | null {
+  try {
+    if (typeof window === "undefined") return null;
+    const raw = window.sessionStorage.getItem(PENDING_OTP_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<PendingOtp> | null;
+    if (!parsed || typeof parsed.email !== "string") return null;
+    if (typeof parsed.sentAt !== "number") return null;
+    if (isOtpExpired(parsed.sentAt, now)) return null;
+    return { email: parsed.email, sentAt: parsed.sentAt };
+  } catch {
+    return null;
+  }
+}
+
+/** Persist (or clear) the in-flight code. Never throws. */
+export function writePendingOtp(pending: PendingOtp | null): void {
+  try {
+    if (typeof window === "undefined") return;
+    if (pending) {
+      window.sessionStorage.setItem(PENDING_OTP_KEY, JSON.stringify(pending));
+    } else {
+      window.sessionStorage.removeItem(PENDING_OTP_KEY);
+    }
+  } catch {
+    // Storage unavailable: the in-memory state still drives this session.
+  }
+}

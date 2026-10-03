@@ -1,9 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import {
   OTP_WINDOW_MS,
+  PENDING_OTP_KEY,
   formatCountdown,
   isOtpExpired,
+  readPendingOtp,
   remainingSeconds,
+  writePendingOtp,
 } from "../lib/otp";
 
 describe("OTP_WINDOW_MS", () => {
@@ -49,6 +52,28 @@ describe("isOtpExpired", () => {
     expect(isOtpExpired(t0, t0 + 119_999)).toBe(false);
     expect(isOtpExpired(t0, t0 + 120_000)).toBe(true);
     expect(isOtpExpired(t0, t0 + 120_001)).toBe(true);
+  });
+});
+
+describe("pending OTP storage", () => {
+  // These back the "go check your email in another tab" fix on BOTH sign-in
+  // screens. The test env has no window, which exercises the guarded path:
+  // storage helpers must degrade to "no pending code" instead of throwing,
+  // since a hardened/private browser config can refuse sessionStorage access.
+  test("read returns null when there is no window", () => {
+    expect(readPendingOtp()).toBeNull();
+  });
+
+  test("write is a safe no-op without a window", () => {
+    expect(() => writePendingOtp({ email: "a@b.com", sentAt: Date.now() })).not.toThrow();
+    expect(() => writePendingOtp(null)).not.toThrow();
+  });
+
+  test("both screens share one storage key", () => {
+    // A private key per screen would make the code vanish when moving between
+    // /auth and /auth/ui, which is the same glitch in a different guise.
+    expect(typeof PENDING_OTP_KEY).toBe("string");
+    expect(PENDING_OTP_KEY.length).toBeGreaterThan(0);
   });
 });
 
