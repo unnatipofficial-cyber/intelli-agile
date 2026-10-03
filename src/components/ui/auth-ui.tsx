@@ -9,6 +9,7 @@ import {
   writePendingOtp,
   type PendingOtp,
 } from "@/lib/otp";
+import { classifySignInIdentifier } from "@/lib/invite";
 import { Slot } from "@radix-ui/react-slot";
 import * as LabelPrimitive from "@radix-ui/react-label";
 import { cva, type VariantProps } from "class-variance-authority";
@@ -16,7 +17,7 @@ import { Eye, EyeOff, ArrowRight, Loader2, UserX } from "lucide-react";
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 import { useNavigate, useSearchParams } from "react-router";
-import { useQuery } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import { useAuth } from "@/hooks/use-auth";
 import { api } from "@/convex/_generated/api";
 import {
@@ -260,6 +261,13 @@ function AuthFormContainer({
   // Ticking clock for the countdown; the interval stops itself once the code
   // expires rather than re-rendering forever on a dead one.
   const [now, setNow] = useState(() => Date.now());
+  // Token pasted into the email box, awaiting resolution by `preview`.
+  const [inviteLookup, setInviteLookup] = useState<string | null>(null);
+  const invitePreview = useQuery(
+    api.invitations.preview,
+    inviteLookup ? { token: inviteLookup } : "skip",
+  );
+  const acceptInvite = useMutation(api.invitations.accept);
 
   const secondsLeft = pendingOtp ? remainingSeconds(pendingOtp.sentAt, now) : 0;
   const otpExpired = !!pendingOtp && secondsLeft <= 0;
@@ -304,12 +312,80 @@ function AuthFormContainer({
     setError(null);
   }, [isSignIn]);
 
+  // Resolve a pasted invite token into the address it was issued for, then send
+  // that person their real sign-in code. This is what makes the emailed token
+  // usable at all: the relay can only deliver the token as text, so people
+  // paste it into the first field they see.
+  const handledLookup = useRef<string | null>(null);
+  useEffect(() => {
+    if (!inviteLookup || !invitePreview) return;
+    if (handledLookup.current === inviteLookup) return;
+    handledLookup.current = inviteLookup;
+
+    const resolved = inviteLookup.toUpperCase();
+    setInviteLookup(null);
+
+    if (!invitePreview.valid) {
+      setError(
+        invitePreview.expired
+          ? "That invitation has expired. Ask for a new one."
+          : invitePreview.used
+            ? "That invitation has already been used."
+            : "That invitation code isn't valid.",
+      );
+      return;
+    }
+
+    const invitedEmail = invitePreview.email;
+    setEmail(invitedEmail);
+    setIsPending(true);
+    void (async () => {
+      try {
+        await signIn("email-otp", { email: invitedEmail, redirectTo: redirect });
+        updatePendingOtp({
+          email: invitedEmail,
+          sentAt: Date.now(),
+          inviteToken: resolved,
+        });
+        setCode("");
+      } catch (err) {
+        console.error("Invite sign-in error:", err);
+        setError(
+          err instanceof Error && err.message
+            ? err.message
+            : "We couldn't send a code to that address. Try again.",
+        );
+      } finally {
+        setIsPending(false);
+      }
+    })();
+  }, [inviteLookup, invitePreview, redirect, signIn]);
+
   const handleEmailSubmit = async (
     event: React.FormEvent<HTMLFormElement>,
   ) => {
     event.preventDefault();
-    setIsPending(true);
     setError(null);
+
+    // An invite token pasted here is not an email; hand it to the lookup
+    // instead of mailing a sign-in code to a non-existent address.
+    const kind = classifySignInIdentifier(email);
+    if (kind === "invite-token") {
+      setInviteLookup(email.trim());
+      return;
+    }
+    if (kind === "invalid") {
+      setError("Enter a valid email address, or paste an invite code.");
+      return;
+    }
+    // `noValidate` on the form means the browser no longer catches typos for
+    // us, so restore that instant feedback before spending a round trip.
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      setError("That doesn't look like an email address.");
+      return;
+    }
+
+    setIsPending(true);
     try {
       await signIn("email-otp", {
         email,
@@ -337,6 +413,33 @@ function AuthFormContainer({
     setError(null);
     try {
       await signIn("email-otp", { email, code, redirectTo: redirect });
+
+      // Signed in first, so the invite has an identity to attach to. A failure
+      // here must not trap someone who has already proved who they are — they
+      // stay signed in and the invite can simply be re-sent.
+      const inviteToken = pendingOtp?.inviteToken;
+      if (inviteToken) {
+        // The session token can land a beat after `signIn` resolves, so a
+        // first "must be signed in" is treated as a race and retried once.
+        // Without this the failure is silent: the person signs in and simply
+        // never gets the role their invite promised.
+        const acceptWithRetry = async (attempt: number): Promise<boolean> => {
+          try {
+            const accepted = await acceptInvite({ token: inviteToken });
+            console.log("invitation accepted, role:", accepted.role);
+            return true;
+          } catch (err) {
+            if (attempt === 0) {
+              await new Promise((resolve) => setTimeout(resolve, 400));
+              return acceptWithRetry(1);
+            }
+            console.error("Invitation acceptance failed:", err);
+            return false;
+          }
+        };
+        await acceptWithRetry(0);
+      }
+
       updatePendingOtp(null);
       navigate(redirect, { replace: true });
     } catch (err) {
@@ -446,6 +549,11 @@ function AuthFormContainer({
         <form
           onSubmit={handleEmailSubmit}
           autoComplete="on"
+          // The invite token is 8 characters with no "@", which native email
+          // validation rejects outright ("Please include an '@'...") before any
+          // of our code runs. We validate ourselves so a pasted invite code is
+          // a supported way in rather than a dead end.
+          noValidate
           className="grid gap-4"
         >
           {!isSignIn && (

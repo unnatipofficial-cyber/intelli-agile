@@ -54,6 +54,13 @@ export const PENDING_OTP_KEY = "aie.pending-otp";
 export interface PendingOtp {
   email: string;
   sentAt: number;
+  /**
+   * Invite token this sign-in is redeeming, when the person arrived by pasting
+   * a token into the email box. Carried through the OTP step so the invite can
+   * be accepted once they are authenticated, and stored alongside the code so a
+   * mid-verification refresh does not lose it.
+   */
+  inviteToken?: string;
 }
 
 /**
@@ -72,7 +79,13 @@ export function readPendingOtp(now: number = Date.now()): PendingOtp | null {
     if (!parsed || typeof parsed.email !== "string") return null;
     if (typeof parsed.sentAt !== "number") return null;
     if (isOtpExpired(parsed.sentAt, now)) return null;
-    return { email: parsed.email, sentAt: parsed.sentAt };
+    return {
+      email: parsed.email,
+      sentAt: parsed.sentAt,
+      ...(typeof parsed.inviteToken === "string"
+        ? { inviteToken: parsed.inviteToken }
+        : {}),
+    };
   } catch {
     return null;
   }
